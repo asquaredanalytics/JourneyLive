@@ -24,11 +24,7 @@ Platform_Events$PLATFORMEVENTS <- gsub(pattern, "", Platform_Events$PLATFORMEVEN
 Platform_Events <- Platform_Events %>%
   mutate(PLATFORMEVENTS = map_chr(str_split(PLATFORMEVENTS, ","), ~ paste(unique(str_trim(.x)), collapse = ",")))
 
-
-
-
-
-df_wider <- Platform_Events %>%
+Platform_Events <- Platform_Events %>%
   separate_longer_delim(PLATFORMEVENTS, delim = ",") %>%
   mutate(PLATFORMEVENTS = trimws(PLATFORMEVENTS), present = 1) %>%
   pivot_wider(
@@ -37,3 +33,8 @@ df_wider <- Platform_Events %>%
     values_fill = 0,
     values_fn = max # Ensures a 1 is kept if a word accidentally repeats in a cell
   )
+
+Comprehensive_DF <- merge(Platform_Events, Daily_Checks, by = c('USERID', 'EVENTDATE'), all.x = TRUE)
+
+Comprehensive_DF <- merge(Comprehensive_DF, Monthly_Assessments, by = c('USERID', 'EVENTDATE'), all.x = TRUE)
+

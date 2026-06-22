@@ -1,0 +1,110 @@
+---
+title: "Journey Prevention Investigation"
+author: "Garrett Jenkins"
+date: "2026-06-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Loading
+
+``` {r loading_configuration}
+
+library(dplyr)
+library(stringr)
+library(purrr)
+library(tidyr)
+
+Daily_Checks <- read.csv("C:/Users/Owner/Downloads/Daily Check-ins.csv")
+
+Daily_Checks$DAILY <- 1
+
+colnames(Daily_Checks)[colnames(Daily_Checks) == "CHECKINDATE"] <- "EVENTDATE"
+
+Monthly_Assessments <- read.csv("C:/Users/Owner/Downloads/Monthly Assessments.csv")
+
+Monthly_Assessments$MONTHLY <- 1
+
+colnames(Monthly_Assessments)[colnames(Monthly_Assessments) == "ASSESSMENTDATE"] <- "EVENTDATE"
+
+Platform_Events <- read.csv("C:/Users/Owner/Downloads/Platform Events.csv")
+
+#Comprehensive_DF <- merge(Monthly_Assessments, Platform_Events, by = c('USERID', 'EVENTDATE'), all.x = TRUE)
+
+drop_list <- c("\\[", "\"", " ", "\\]")
+
+pattern <- paste0(drop_list, collapse = "|")
+
+Platform_Events$PLATFORMEVENTS <- gsub(pattern, "", Platform_Events$PLATFORMEVENTS)
+
+Platform_Events <- Platform_Events %>%
+  mutate(PLATFORMEVENTS = map_chr(str_split(PLATFORMEVENTS, ","), ~ paste(unique(str_trim(.x)), collapse = ",")))
+
+Platform_Events <- Platform_Events %>%
+  separate_longer_delim(PLATFORMEVENTS, delim = ",") %>%
+  mutate(PLATFORMEVENTS = trimws(PLATFORMEVENTS), present = 1) %>%
+  pivot_wider(
+    names_from = PLATFORMEVENTS,
+    values_from = present,
+    values_fill = 0,
+    values_fn = max # Ensures a 1 is kept if a word accidentally repeats in a cell
+  )
+
+Comp_DF <- merge(Platform_Events, Daily_Checks, by = c('USERID', 'EVENTDATE'), all.x = TRUE)
+
+Comp_DF <- merge(Comp_DF, Monthly_Assessments, by = c('USERID', 'EVENTDATE'), all.x = TRUE)
+
+Comp_DF$EVENTDATE <- as.Date(Comp_DF$EVENTDATE)
+
+###write.csv(Comp_DF, "C:/Users/Owner/Downloads/Journey_Data_Merged_JUN_26.csv", row.names = FALSE)
+
+```
+
+## Exploration
+
+### Checking that all Journey Event Types have actually observed events
+### They do
+
+``` {r descriptives_events_occurred}
+
+col_indexes <- c(3:26)
+
+col_sums <- colSums(Comp_DF[, col_indexes])
+
+col_sums
+
+```
+
+``` {r descriptives_daily_stress}
+
+table(Comp_DF$STRESSLEVEL)
+
+
+```
+
+
+``` {r coding_indicator_variables}
+
+Comp_DF$RISK <- NULL
+
+Comp_DF$RISK <- ifelse(Comp_DF$FEELINGRATING == 1 | Comp_DF$STRESSLEVEL > 5, 1, 0)
+
+
+
+
+
+Comp_DF <- Comp_DF %>%
+  group_by(USERID) %>%
+  mutate(
+    baseline = STRESSLEVEL[EVENTDATE == min(EVENTDATE)],
+    increased = STRESSLEVEL > baseline & EVENTDATE != min(EVENTDATE)
+  ) %>%
+  ungroup() %>%
+  arrange(USERID, EVENTDATE)
+
+
+
+```

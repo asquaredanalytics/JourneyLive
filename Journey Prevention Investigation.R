@@ -38,3 +38,4 @@ Comprehensive_DF <- merge(Platform_Events, Daily_Checks, by = c('USERID', 'EVENT
 
 Comprehensive_DF <- merge(Comprehensive_DF, Monthly_Assessments, by = c('USERID', 'EVENTDATE'), all.x = TRUE)
 
+write.csv(Comprehensive_DF, "C:/Users/Owner/Downloads/Journey_Data_Merged_JUN_26.csv", row.names = FALSE)

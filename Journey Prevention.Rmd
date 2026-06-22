@@ -110,17 +110,34 @@ second_cols <- names(Comp_DF)[3:26]
 
 ### The below seems to be counting an additional row in the sum ###
 
-Comp_DF <- Comp_DF %>%
-  group_by(USERID) %>%                  
-  arrange(EVENTDATE) %>%
-  mutate(
-    period = cumsum(!is.na(MONTHLY)),                                  ###  <-- Fix this chunk
-    VALUE_COL = sum(daily_journey_email_open, na.rm = TRUE)
-  ) %>%
-  group_by(USERID, period) %>%
-  mutate(VALUE_COL = sum(daily_journey_email_open, na.rm = TRUE)) %>%
-  ungroup()
 
-########################################################################
+for (col in second_cols) {
+  sum_col <- paste0(col, "_SUM")
+  
+  Comp_DF <- Comp_DF %>%
+    group_by(USERID) %>%
+    arrange(USERID, EVENTDATE) %>%
+    mutate(period = cumsum(!is.na(MONTHLY))) %>%
+    group_by(USERID, period) %>%
+    mutate(!!sum_col := sum(.data[[col]], na.rm = TRUE)) %>%
+    ungroup() %>%
+    select(-period)
+}
+
+Comp_DF <- Comp_DF %>%
+  mutate(across(
+      ends_with("_SUM"),
+    ~ lag(.x)
+  ))
+
+```
+
+## Subsetting to Monthly Trend Analysis File
+
+``` {r Subsetting}
+
+Monthly_DF <- Comp_DF[which(Comp_DF$MONTHLY ==1), -c(3:26)]  ### Update columns here if needed to remove appropriate vars
+
+
 
 ```

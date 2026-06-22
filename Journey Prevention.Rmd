@@ -57,6 +57,8 @@ Comp_DF <- merge(Platform_Events, Daily_Checks, by = c('USERID', 'EVENTDATE'), a
 
 Comp_DF <- merge(Comp_DF, Monthly_Assessments, by = c('USERID', 'EVENTDATE'), all.x = TRUE)
 
+Comp_DF <- Comp_DF[,-c(31,32,35)]
+
 Comp_DF$EVENTDATE <- as.Date(Comp_DF$EVENTDATE)
 
 ###write.csv(Comp_DF, "C:/Users/Owner/Downloads/Journey_Data_Merged_JUN_26.csv", row.names = FALSE)
@@ -81,7 +83,6 @@ col_sums
 ``` {r descriptives_daily_stress}
 
 table(Comp_DF$STRESSLEVEL)
-
 
 ```
 
@@ -108,16 +109,30 @@ Comp_DF <- Comp_DF %>%
 
 second_cols <- names(Comp_DF)[3:26] 
 
-### The below seems to be counting an additional row in the sum ###
-
+### Event Totals Between Monthly Assessment Types
 
 for (col in second_cols) {
-  sum_col <- paste0(col, "_SUM")
+  sum_col <- paste0(col, "_MONTHLY_SUM")
   
   Comp_DF <- Comp_DF %>%
     group_by(USERID) %>%
     arrange(USERID, EVENTDATE) %>%
     mutate(period = cumsum(!is.na(MONTHLY))) %>%
+    group_by(USERID, period) %>%
+    mutate(!!sum_col := sum(.data[[col]], na.rm = TRUE)) %>%
+    ungroup() %>%
+    select(-period)
+}
+
+### Event Totals Between Daily Check-in Assessment Types
+
+for (col in second_cols) {
+  sum_col <- paste0(col, "_DAILY_SUM")
+  
+  Comp_DF <- Comp_DF %>%
+    group_by(USERID) %>%
+    arrange(USERID, EVENTDATE) %>%
+    mutate(period = cumsum(!is.na(DAILY))) %>%
     group_by(USERID, period) %>%
     mutate(!!sum_col := sum(.data[[col]], na.rm = TRUE)) %>%
     ungroup() %>%
@@ -130,11 +145,13 @@ Comp_DF <- Comp_DF %>%
     ~ lag(.x)
   ))
 
+
+
 ```
 
 ## Subsetting to Monthly Trend Analysis File
 
-``` {r Subsetting}
+``` {r Subsetting_Monthly}
 
 Monthly_DF <- Comp_DF[which(Comp_DF$MONTHLY ==1), -c(3:26)]  ### Update columns here if needed to remove appropriate vars
 

@@ -90,8 +90,7 @@ table(Comp_DF$STRESSLEVEL)
 
 Comp_DF$RISK <- NULL
 
-Comp_DF$RISK <- ifelse(Comp_DF$FEELINGRATING == 1 | Comp_DF$STRESSLEVEL > 5 | Comp_DF$DAYSEMOTIONALLYCHALLENGING > 0 | Comp_DF$MANAGESTRESSLEVEL <=3, 1, 0)
-
+Comp_DF$RISK <- ifelse(Comp_DF$FEELINGRATING == 1 | Comp_DF$STRESSLEVEL > 5 | Comp_DF$DAYSEMOTIONALLYCHALLENGING > 0 | Comp_DF$MANAGESTRESSLEVEL <= 3, 1, 0)
 
 Comp_DF <- Comp_DF %>%
   group_by(USERID) %>%
@@ -107,7 +106,21 @@ Comp_DF <- Comp_DF %>%
   ungroup() %>%
   arrange(USERID, EVENTDATE)
 
-#Drop in coping ability
-#of days challenging increase
+second_cols <- names(Comp_DF)[3:26] 
+
+### The below seems to be counting an additional row in the sum ###
+
+Comp_DF <- Comp_DF %>%
+  group_by(USERID) %>%                  
+  arrange(EVENTDATE) %>%
+  mutate(
+    period = cumsum(!is.na(MONTHLY)),                                  ###  <-- Fix this chunk
+    VALUE_COL = sum(daily_journey_email_open, na.rm = TRUE)
+  ) %>%
+  group_by(USERID, period) %>%
+  mutate(VALUE_COL = sum(daily_journey_email_open, na.rm = TRUE)) %>%
+  ungroup()
+
+########################################################################
 
 ```

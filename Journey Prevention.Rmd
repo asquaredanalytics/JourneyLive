@@ -89,9 +89,17 @@ table(Comp_DF$STRESSLEVEL)
 
 ``` {r coding_indicator_variables}
 
-Comp_DF$RISK <- NULL
+Comp_DF$BAD_DAY_RISK <- ifelse(Comp_DF$FEELINGRATING == 1, 1, 0)
 
-Comp_DF$RISK <- ifelse(Comp_DF$FEELINGRATING == 1 | Comp_DF$STRESSLEVEL > 5 | Comp_DF$DAYSEMOTIONALLYCHALLENGING > 0 | Comp_DF$MANAGESTRESSLEVEL <= 3, 1, 0)
+Comp_DF$BAD_DAY_RISK <- ifelse(is.na(Comp_DF$BAD_DAY_RISK), 0, Comp_DF$BAD_DAY_RISK)
+
+Comp_DF$STRESS_RISK <- ifelse(Comp_DF$STRESSLEVEL > 5, 1, 0)
+
+Comp_DF$CHALLENGING_DAYS_RISK <- ifelse(Comp_DF$DAYSEMOTIONALLYCHALLENGING > 0, 1, 0)
+
+Comp_DF$MANAGE_STRESS_RISK <- ifelse(Comp_DF$MANAGESTRESSLEVEL <= 3, 1, 0)
+
+#Comp_DF$RISK <- ifelse(Comp_DF$FEELINGRATING == 1 | Comp_DF$STRESSLEVEL > 5 | Comp_DF$DAYSEMOTIONALLYCHALLENGING > 0 | Comp_DF$MANAGESTRESSLEVEL <= 3, 1, 0)
 
 Comp_DF <- Comp_DF %>%
   group_by(USERID) %>%
@@ -102,7 +110,7 @@ Comp_DF <- Comp_DF %>%
     STRESS_INCREASED = as.integer(STRESSLEVEL > BASELINE_STRESS & EVENTDATE != min(EVENTDATE)),
     COPING_DECREASED = as.integer(MANAGESTRESSLEVEL < BASELINE_COPING & EVENTDATE != min(EVENTDATE)),
     DAYS_CHALLENGING_INCREASED = as.integer(DAYSEMOTIONALLYCHALLENGING > BASELINE_CHALLENGING & EVENTDATE != min(EVENTDATE)),
-    ANY_RISK = as.integer(any(STRESS_INCREASED, COPING_DECREASED, DAYS_CHALLENGING_INCREASED))
+    ANY_RISK = as.integer(any(BAD_DAY_RISK = 1, STRESS_RISK = 1, CHALLENGING_DAYS_RISK = 1, MANAGE_STRESS_RISK = 1, STRESS_INCREASED = 1, COPING_DECREASED = 1, DAYS_CHALLENGING_INCREASED = 1, na.rm = TRUE))
   ) %>%
   ungroup() %>%
   arrange(USERID, EVENTDATE)
@@ -149,7 +157,7 @@ Comp_DF <- Comp_DF %>%
 
 ```
 
-## Subsetting to Monthly Trend Analysis File
+## Subsetting to Monthly and Daily Trend Analysis File
 
 ``` {r Subsetting_Monthly}
 
@@ -164,7 +172,7 @@ Daily_DF_Risk <- Daily_DF[which(Daily_DF$ANY_RISK == 1),]
 ```
 
 
-``` {r}
+``` {r }
 
 cor.test(Monthly_DF_Risk$FEELINGRATING, Monthly_DF_Risk$daily_journey_email_open_MONTHLY_SUM)
 

@@ -107,6 +107,8 @@ Comp_DF <- Comp_DF %>%
   ungroup() %>%
   arrange(USERID, EVENTDATE)
 
+Comp_DF$ANY_RISK <- ifelse(is.na(Comp_DF$ANY_RISK), 0, Comp_DF$ANY_RISK)
+
 second_cols <- names(Comp_DF)[3:26] 
 
 ### Event Totals Between Monthly Assessment Types
@@ -145,16 +147,27 @@ Comp_DF <- Comp_DF %>%
     ~ lag(.x)
   ))
 
-
-
 ```
 
 ## Subsetting to Monthly Trend Analysis File
 
 ``` {r Subsetting_Monthly}
 
-Monthly_DF <- Comp_DF[which(Comp_DF$MONTHLY ==1), -c(3:26)]  ### Update columns here if needed to remove appropriate vars
+Monthly_DF <- Comp_DF[which(Comp_DF$MONTHLY == 1), -c(3:26)]  ### Update columns here if needed to remove appropriate vars
+
+Monthly_DF_Risk <- Monthly_DF[which(Monthly_DF$ANY_RISK == 1),]
+
+Daily_DF <- Comp_DF[which(Comp_DF$DAILY == 1), -c(3:26)]  ### Update columns here if needed to remove appropriate vars
+
+Daily_DF_Risk <- Daily_DF[which(Daily_DF$ANY_RISK == 1),]
+
+```
 
 
+``` {r}
+
+cor.test(Monthly_DF_Risk$FEELINGRATING, Monthly_DF_Risk$daily_journey_email_open_MONTHLY_SUM)
+
+cor.test(Daily_DF_Risk$FEELINGRATING, Daily_DF_Risk$daily_journey_email_open_MONTHLY_SUM)
 
 ```

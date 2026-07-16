@@ -18,7 +18,7 @@ library(stringr)
 library(purrr)
 library(tidyr)
 
-Daily_Checks <- read.csv("C:/Users/Owner/Downloads/Daily Check-ins.csv")
+Daily_Checks <- read.csv("C:/Users/Owner/Downloads/Daily Checkins.csv")
 
 Daily_Checks$DAILY <- 1
 
@@ -57,11 +57,11 @@ Comp_DF <- merge(Platform_Events, Daily_Checks, by = c('USERID', 'EVENTDATE'), a
 
 Comp_DF <- merge(Comp_DF, Monthly_Assessments, by = c('USERID', 'EVENTDATE'), all.x = TRUE)
 
-Comp_DF <- Comp_DF[,-c(31,32,35)]
+Comp_DF <- Comp_DF[,-c(35,36,39)]
 
 Comp_DF$EVENTDATE <- as.Date(Comp_DF$EVENTDATE)
 
-###write.csv(Comp_DF, "C:/Users/Owner/Downloads/Journey_Data_Merged_JUN_26.csv", row.names = FALSE)
+###write.csv(Comp_DF, "C:/Users/Owner/Downloads/TEST.csv", row.names = FALSE)
 
 ```
 
@@ -72,7 +72,7 @@ Comp_DF$EVENTDATE <- as.Date(Comp_DF$EVENTDATE)
 
 ``` {r descriptives_events_occurred}
 
-col_indexes <- c(3:26)
+col_indexes <- c(3:30)
 
 col_sums <- colSums(Comp_DF[, col_indexes])
 
@@ -95,6 +95,27 @@ Comp_DF$BAD_DAY_RISK <- ifelse(is.na(Comp_DF$BAD_DAY_RISK), 0, Comp_DF$BAD_DAY_R
 
 Comp_DF$STRESS_RISK <- ifelse(Comp_DF$STRESSLEVEL > 5, 1, 0)
 
+### Bucket into	moderate, elevated, high-risk
+###	Review distribution of daily stress scores > 5 to define
+
+### If stress increases over time by any amount then RISK
+### How much increase is moderate, elevated, high-risk?
+
+
+Comp_DF$FEELINGSFREQUENCY
+
+### If depression/anxiety = Fairly Often or Very Often then RISK
+### If increases from Never/Almost never to >= “Sometimes” then RISK
+### How to define moderate/elevated/high-risk here?
+
+
+
+
+
+
+
+
+
 Comp_DF$CHALLENGING_DAYS_RISK <- ifelse(Comp_DF$DAYSEMOTIONALLYCHALLENGING > 0, 1, 0)
 
 Comp_DF$MANAGE_STRESS_RISK <- ifelse(Comp_DF$MANAGESTRESSLEVEL <= 3, 1, 0)
@@ -104,16 +125,20 @@ Comp_DF$MANAGE_STRESS_RISK <- ifelse(Comp_DF$MANAGESTRESSLEVEL <= 3, 1, 0)
 Comp_DF <- Comp_DF %>%
   group_by(USERID) %>%
   mutate(
-    BASELINE_STRESS = STRESSLEVEL[EVENTDATE == min(EVENTDATE)],
-    BASELINE_COPING = MANAGESTRESSLEVEL[EVENTDATE == min(EVENTDATE)],
-    BASELINE_CHALLENGING = DAYSEMOTIONALLYCHALLENGING[EVENTDATE == min(EVENTDATE)],
+    BASELINE_STRESS = first(STRESSLEVEL[EVENTDATE == min(EVENTDATE)]),
+    BASELINE_COPING = first(MANAGESTRESSLEVEL[EVENTDATE == min(EVENTDATE)]),
+    BASELINE_CHALLENGING = first(DAYSEMOTIONALLYCHALLENGING[EVENTDATE == min(EVENTDATE)]),
     STRESS_INCREASED = as.integer(STRESSLEVEL > BASELINE_STRESS & EVENTDATE != min(EVENTDATE)),
     COPING_DECREASED = as.integer(MANAGESTRESSLEVEL < BASELINE_COPING & EVENTDATE != min(EVENTDATE)),
     DAYS_CHALLENGING_INCREASED = as.integer(DAYSEMOTIONALLYCHALLENGING > BASELINE_CHALLENGING & EVENTDATE != min(EVENTDATE)),
-    ANY_RISK = as.integer(any(BAD_DAY_RISK = 1, STRESS_RISK = 1, CHALLENGING_DAYS_RISK = 1, MANAGE_STRESS_RISK = 1, STRESS_INCREASED = 1, COPING_DECREASED = 1, DAYS_CHALLENGING_INCREASED = 1, na.rm = TRUE))
+    ANY_RISK = as.integer(any(BAD_DAY_RISK == 1, STRESS_RISK == 1, CHALLENGING_DAYS_RISK == 1, MANAGE_STRESS_RISK == 1, STRESS_INCREASED == 1, COPING_DECREASED == 1, DAYS_CHALLENGING_INCREASED == 1, na.rm = TRUE))
   ) %>%
   ungroup() %>%
   arrange(USERID, EVENTDATE)
+
+
+### How to define moderate/elevated/high-risk for those who indicate a drop in ability to cope (COPING_DECREASED)
+
 
 Comp_DF$ANY_RISK <- ifelse(is.na(Comp_DF$ANY_RISK), 0, Comp_DF$ANY_RISK)
 
@@ -177,5 +202,46 @@ Daily_DF_Risk <- Daily_DF[which(Daily_DF$ANY_RISK == 1),]
 cor.test(Monthly_DF_Risk$FEELINGRATING, Monthly_DF_Risk$daily_journey_email_open_MONTHLY_SUM)
 
 cor.test(Daily_DF_Risk$FEELINGRATING, Daily_DF_Risk$daily_journey_email_open_MONTHLY_SUM)
+
+```
+
+``` {r sample_size_frequencies}
+
+
+### Based on the information Journey has provided, there appear to be approximately 6,700 participants with repeated assessment ### data and roughly 10,600 participants with repeated daily check-ins.
+
+
+Comp_DF %>%
+  count(USERID) %>%
+  #filter(n > 2) %>%
+  summarise(distinct_users = n())
+
+Daily_Checks %>%
+  group_by(USERID) %>%
+  summarise(
+    sum_daily   = sum(DAILY, na.rm = TRUE)
+  ) %>%
+  filter(sum_daily > 1) %>%
+  summarise(distinct_users = n())
+
+
+Monthly_Assessments %>%
+  group_by(USERID) %>%
+  summarise(
+    sum_monthly = sum(MONTHLY, na.rm = TRUE)
+  ) %>%
+  filter(sum_monthly > 1) %>%
+  summarise(distinct_users = n())
+
+
+  Comp_DF %>%
+  group_by(USERID) %>%
+  summarise(
+    sum_daily   = sum(DAILY, na.rm = TRUE),
+    sum_monthly = sum(MONTHLY, na.rm = TRUE)
+  ) %>%
+  filter(sum_daily > 3 & sum_monthly > 4) %>%
+  summarise(distinct_users = n())
+
 
 ```

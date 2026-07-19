@@ -3,6 +3,8 @@ title: "Journey Prevention Investigation"
 author: "Garrett Jenkins"
 date: "2026-06-22"
 output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
@@ -70,7 +72,7 @@ Comp_DF$EVENTDATE <- as.Date(Comp_DF$EVENTDATE)
 ### Checking that all Journey Event Types have actually observed events
 ### They do
 
-``` {r descriptives_events_occurred}
+```{r include=FALSE}
 
 col_indexes <- c(3:30)
 
@@ -91,9 +93,15 @@ table(Comp_DF$STRESSLEVEL)
 
 Comp_DF$BAD_DAY_RISK <- ifelse(Comp_DF$FEELINGRATING == 1, 1, 0)
 
-Comp_DF$BAD_DAY_RISK <- ifelse(is.na(Comp_DF$BAD_DAY_RISK), 0, Comp_DF$BAD_DAY_RISK)
+#Comp_DF$BAD_DAY_RISK <- ifelse(is.na(Comp_DF$BAD_DAY_RISK), 0, Comp_DF$BAD_DAY_RISK)
 
 Comp_DF$STRESS_RISK <- ifelse(Comp_DF$STRESSLEVEL > 5, 1, 0)
+
+#Comp_DF$BAD_DAY_RISK <- ifelse(is.na(Comp_DF$BAD_DAY_RISK), 0, Comp_DF$BAD_DAY_RISK)
+
+Comp_DF$DEP_ANX_RISK <- ifelse(Comp_DF$FEELINGSFREQUENCY > 3, 1, 0)
+
+#Comp_DF$BAD_DAY_RISK <- ifelse(is.na(Comp_DF$BAD_DAY_RISK), 0, Comp_DF$BAD_DAY_RISK)
 
 ### Bucket into	moderate, elevated, high-risk
 ###	Review distribution of daily stress scores > 5 to define
@@ -101,24 +109,18 @@ Comp_DF$STRESS_RISK <- ifelse(Comp_DF$STRESSLEVEL > 5, 1, 0)
 ### If stress increases over time by any amount then RISK
 ### How much increase is moderate, elevated, high-risk?
 
-
-Comp_DF$FEELINGSFREQUENCY
-
-### If depression/anxiety = Fairly Often or Very Often then RISK
-### If increases from Never/Almost never to >= “Sometimes” then RISK
+### If depression/anxiety increases from Never/Almost never to >= “Sometimes” then RISK
 ### How to define moderate/elevated/high-risk here?
-
-
-
-
-
-
 
 
 
 Comp_DF$CHALLENGING_DAYS_RISK <- ifelse(Comp_DF$DAYSEMOTIONALLYCHALLENGING > 0, 1, 0)
 
+#Comp_DF$BAD_DAY_RISK <- ifelse(is.na(Comp_DF$BAD_DAY_RISK), 0, Comp_DF$BAD_DAY_RISK)
+
 Comp_DF$MANAGE_STRESS_RISK <- ifelse(Comp_DF$MANAGESTRESSLEVEL <= 3, 1, 0)
+
+#Comp_DF$BAD_DAY_RISK <- ifelse(is.na(Comp_DF$BAD_DAY_RISK), 0, Comp_DF$BAD_DAY_RISK)
 
 #Comp_DF$RISK <- ifelse(Comp_DF$FEELINGRATING == 1 | Comp_DF$STRESSLEVEL > 5 | Comp_DF$DAYSEMOTIONALLYCHALLENGING > 0 | Comp_DF$MANAGESTRESSLEVEL <= 3, 1, 0)
 
@@ -128,10 +130,12 @@ Comp_DF <- Comp_DF %>%
     BASELINE_STRESS = first(STRESSLEVEL[EVENTDATE == min(EVENTDATE)]),
     BASELINE_COPING = first(MANAGESTRESSLEVEL[EVENTDATE == min(EVENTDATE)]),
     BASELINE_CHALLENGING = first(DAYSEMOTIONALLYCHALLENGING[EVENTDATE == min(EVENTDATE)]),
+    BASELINE_DEP_ANX = first(FEELINGSFREQUENCY[EVENTDATE == min(EVENTDATE)]),
     STRESS_INCREASED = as.integer(STRESSLEVEL > BASELINE_STRESS & EVENTDATE != min(EVENTDATE)),
     COPING_DECREASED = as.integer(MANAGESTRESSLEVEL < BASELINE_COPING & EVENTDATE != min(EVENTDATE)),
     DAYS_CHALLENGING_INCREASED = as.integer(DAYSEMOTIONALLYCHALLENGING > BASELINE_CHALLENGING & EVENTDATE != min(EVENTDATE)),
-    ANY_RISK = as.integer(any(BAD_DAY_RISK == 1, STRESS_RISK == 1, CHALLENGING_DAYS_RISK == 1, MANAGE_STRESS_RISK == 1, STRESS_INCREASED == 1, COPING_DECREASED == 1, DAYS_CHALLENGING_INCREASED == 1, na.rm = TRUE))
+    DEP_ANX_INCREASED = as.integer(FEELINGSFREQUENCY > BASELINE_DEP_ANX & EVENTDATE != min(EVENTDATE)),
+    ANY_RISK = as.integer(any(BAD_DAY_RISK == 1, STRESS_RISK == 1, DEP_ANX_RISK == 1, CHALLENGING_DAYS_RISK == 1, MANAGE_STRESS_RISK == 1, STRESS_INCREASED == 1, COPING_DECREASED == 1, DAYS_CHALLENGING_INCREASED == 1, DEP_ANX_INCREASED == 1, na.rm = TRUE))
   ) %>%
   ungroup() %>%
   arrange(USERID, EVENTDATE)
@@ -240,7 +244,7 @@ Monthly_Assessments %>%
     sum_daily   = sum(DAILY, na.rm = TRUE),
     sum_monthly = sum(MONTHLY, na.rm = TRUE)
   ) %>%
-  filter(sum_daily > 3 & sum_monthly > 4) %>%
+  filter(sum_daily > 1 & sum_monthly > 1) %>%
   summarise(distinct_users = n())
 
 

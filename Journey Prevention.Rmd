@@ -19,6 +19,7 @@ library(dplyr)
 library(stringr)
 library(purrr)
 library(tidyr)
+library(psych)
 
 Daily_Checks <- read.csv("C:/Users/Owner/Downloads/Daily Checkins.csv")
 
@@ -190,22 +191,13 @@ Comp_DF <- Comp_DF %>%
 
 ``` {r Subsetting_Monthly}
 
-Monthly_DF <- Comp_DF[which(Comp_DF$MONTHLY == 1), -c(3:26)]  ### Update columns here if needed to remove appropriate vars
+Monthly_DF <- Comp_DF[which(Comp_DF$MONTHLY == 1), -c(3:30)]  ### Update columns here if needed to remove appropriate vars
 
 Monthly_DF_Risk <- Monthly_DF[which(Monthly_DF$ANY_RISK == 1),]
 
-Daily_DF <- Comp_DF[which(Comp_DF$DAILY == 1), -c(3:26)]  ### Update columns here if needed to remove appropriate vars
+Daily_DF <- Comp_DF[which(Comp_DF$DAILY == 1), -c(3:30)]  ### Update columns here if needed to remove appropriate vars
 
 Daily_DF_Risk <- Daily_DF[which(Daily_DF$ANY_RISK == 1),]
-
-```
-
-
-``` {r }
-
-cor.test(Monthly_DF_Risk$FEELINGRATING, Monthly_DF_Risk$daily_journey_email_open_MONTHLY_SUM)
-
-cor.test(Daily_DF_Risk$FEELINGRATING, Daily_DF_Risk$daily_journey_email_open_MONTHLY_SUM)
 
 ```
 
@@ -247,5 +239,59 @@ Monthly_Assessments %>%
   filter(sum_daily > 1 & sum_monthly > 1) %>%
   summarise(distinct_users = n())
 
+
+```
+
+``` {r monthly_out_pred_correlations}
+
+Outcomes <- c("STRESSLEVEL", "MANAGEFEELINGSLEVEL", "FEELINGSFREQUENCY", "DAYSEMOTIONALLYCHALLENGING", "MANAGESTRESSLEVEL")
+
+Pred_Out_M <- Monthly_DF[, which(grepl("MONTHLY_SUM", names(Monthly_DF)) | names(Monthly_DF) %in% Outcomes)]
+
+Cors_list <- NULL
+
+for (i in Outcomes) {
+
+ctest_M <- corr.test(Pred_Out_M)
+r_value_M <- round(ctest_M$r[, i], 4)
+p_value_M <- round(ctest_M$p[, i], 4)
+n_value_M <- ctest_M$n[, i]
+
+Monthly_Cors <- data.frame(Correlation = r_value_M, P_Value = p_value_M, N = n_value_M, Outcome = i)
+
+Monthly_Cors$Predictor <- sub(".*\\.", "", rownames(Monthly_Cors))
+
+  Cors_list[[i]] <- Monthly_Cors
+  
+}
+
+Monthly_Cors_DF <- do.call(rbind, Cors_list)
+
+rownames(Monthly_Cors_DF) <- NULL
+
+```
+
+``` {r daily_out_pred_correlations}
+
+Pred_Out_D <- Daily_DF[, which(grepl("DAILY_SUM", names(Monthly_DF)) | names(Monthly_DF) %in% Outcomes)]
+
+for (i in Outcomes){
+
+ctest_D <- corr.test(Pred_Out_D)
+r_value_D <- round(ctest_D$r[, i], 4)
+p_value_D <- round(ctest_D$p[, i], 4)
+n_value_D <- ctest_D$n[, i]
+
+Daily_Cors <- data.frame(Correlation = r_value_D, P_Value = p_value_D, N = n_value_D, Outcome = i)
+
+Daily_Cors$Predictor <- sub(".*\\.", "", rownames(Daily_Cors))
+
+  Cors_list[[i]] <- Daily_Cors
+  
+}
+
+Daily_Cors_DF <- do.call(rbind, Cors_list)
+
+rownames(Daily_Cors_DF) <- NULL
 
 ```

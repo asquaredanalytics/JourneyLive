@@ -119,6 +119,51 @@ Comp_DF$DEP_ANX_RISK <- ifelse(Comp_DF$FEELINGSFREQUENCY > 3, 1, 0)
 ### If depression/anxiety increases from Never/Almost never to >= “Sometimes” then RISK
 ### How to define moderate/elevated/high-risk here?
 
+Comp_DF <- Comp_DF %>%
+filter(STRESS_RISK == 1) %>%
+  group_by(USERID) %>%
+  mutate(mean_stresslevel = mean(STRESSLEVEL, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(STRESS_RISK_GROUP = ntile(mean_stresslevel, 3))
+  
+
+Comp_DF <- Comp_DF %>%
+filter(DEP_ANX_RISK == 1) %>%
+  group_by(USERID) %>%
+  mutate(mean_dep_anx = mean(FEELINGSFREQUENCY, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(DEP_ANX_RISK_GROUP = ntile(mean_dep_anx, 3))
+
+
+
+#########   Start Here   ####################
+
+### For bad day risk bucketing, maybe look at frequency of occurrences for individuals
+Comp_DF <- Comp_DF %>%
+filter(BAD_DAY_RISK == 1) %>%
+  group_by(USERID) %>%
+  mutate(mean_stresslevel = mean(STRESSLEVEL, na.rm = TRUE),
+         STRESS_RISK_GROUP = ntile(mean_stresslevel, 3)) %>%
+  ungroup()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 Comp_DF$CHALLENGING_DAYS_RISK <- ifelse(Comp_DF$DAYSEMOTIONALLYCHALLENGING > 0, 1, 0)
@@ -329,29 +374,29 @@ rownames(Daily_Cors_DF) <- NULL
 Monthly_DF_Risk_Modeling$TOTAL_JOURNEY_USE_M_z <- scale(Monthly_DF_Risk_Modeling$TOTAL_JOURNEY_USE_M)[,1]
 
 # Random intercept model: allows each person to have their own baseline stress level
-model1 <- lmer(STRESSLEVEL ~ TOTAL_JOURNEY_USE_M + (1 | USERID), data = Monthly_DF_Risk_Modeling)
+model1 <- lmer(STRESSLEVEL ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 + TOTAL_JOURNEY_USE_M_z | USERID), data = Monthly_DF_Risk_Modeling)
 
 summary(model1)
 
-# Random intercept + random slope model: allows the effect of TOTAL_USE_M 
-# to vary by person as well (recommended if you expect individual differences 
-# in how TOTAL_USE_M relates to STRESSLEVEL over time)
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(MANAGESTRESSLEVEL ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 + TOTAL_JOURNEY_USE_M_z | USERID), data = Monthly_DF_Risk_Modeling)
 
+summary(model1)
 
-model2 <- lmer(STRESSLEVEL ~ TOTAL_JOURNEY_USE_M_z + (1 + TOTAL_JOURNEY_USE_M_z | USERID), 
-               data = Monthly_DF_Risk_Modeling)
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(MANAGEFEELINGSLEVEL ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 + TOTAL_JOURNEY_USE_M_z | USERID), data = Monthly_DF_Risk_Modeling)
 
-summary(model2)
+summary(model1)
 
-# Compare the two models to see if adding the random slope improves fit
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(FEELINGSFREQUENCY ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 + TOTAL_JOURNEY_USE_M_z | USERID), data = Monthly_DF_Risk_Modeling)
 
-anova(model1, model2)
+summary(model1)
 
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(DAYSEMOTIONALLYCHALLENGING ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 + TOTAL_JOURNEY_USE_M_z | USERID), data = Monthly_DF_Risk_Modeling)
 
-
-
-
-
+summary(model1)
 
 ```
 
@@ -465,6 +510,38 @@ ggplot(predictions, aes(x = x, y = predicted)) +
 
 
 
+
+
+
+
+```
+
+
+``` {r tvem_monthly_test}
+
+tvem_model_M <- tvem(
+  formula = DAYSEMOTIONALLYCHALLENGING ~ TOTAL_JOURNEY_USE_M_z,
+  data = Monthly_DF_Risk_Modeling,
+  id = USERID,
+  time = DATE_NUMERIC,
+  family = gaussian() # Use binomial() for binary outcomes
+)
+
+# Adjust index/name based on what str() shows you
+coef_df_M <- tvem_model_M$grid_fitted_coefficients$TOTAL_JOURNEY_USE_M_z
+
+coef_df_M$time <- tvem_model_M$time_grid
+
+ggplot(coef_df_M, aes(x = time)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), fill = "steelblue", alpha = 0.2) +
+  geom_line(aes(y = estimate), color = "steelblue", linewidth = 1) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
+  labs(
+    title = "Time-Varying Effect of Total Use on Stress Level",
+    x = "Time (days since first observation)",
+    y = "Estimated Effect of Total Daily Journey Use on STRESSLEVEL"
+  ) +
+  theme_minimal(base_size = 13)
 
 
 

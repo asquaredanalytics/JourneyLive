@@ -24,7 +24,8 @@ library(lme4)
 library(lmerTest)
 library(ggplot2)
 library(ggeffects)
-
+library(tvem)
+library(tidyverse)
 
 Daily_Checks <- read.csv("C:/Users/Owner/Downloads/Daily Checkins.csv")
 
@@ -323,9 +324,6 @@ rownames(Daily_Cors_DF) <- NULL
 ###Risk Signals → Journey Use → No Improvement
 ###Risk Signals → Limited/No Journey Use → Worsening Risk
 
-
-
-
 # Standardize (z-score) TOTAL_JOURNEY_USE_M
 
 Monthly_DF_Risk_Modeling$TOTAL_JOURNEY_USE_M_z <- scale(Monthly_DF_Risk_Modeling$TOTAL_JOURNEY_USE_M)[,1]
@@ -366,30 +364,37 @@ anova(model1, model2)
 
 
 # Install and load the tvem and tidyverse packages
-install.packages("tvem")
-install.packages("tidyverse")
-library(tvem)
-library(tidyverse)
 
 # Example formula where the effect of 'predictor1' varies over 'time'
 # grouped by 'subject_id'
-tvem_model <- tvem(
-  formula = outcome ~ predictor1,
-  data = your_dataset,
-  id = subject_id,
-  time = time,
+tvem_model_D <- tvem(
+  formula = FEELINGRATING ~ TOTAL_JOURNEY_USE_D_z,
+  data = Daily_DF_Risk_Modeling,
+  id = USERID,
+  time = DATE_NUMERIC,
   family = gaussian() # Use binomial() for binary outcomes
 )
 
 # View the summary of the varying coefficients
-summary(tvem_model)
+summary(tvem_model_D)
 
+# Adjust index/name based on what str() shows you
+coef_df_D <- tvem_model_D$grid_fitted_coefficients$TOTAL_JOURNEY_USE_D_z
 
+coef_df_D$time <- tvem_model_D$time_grid
 
+library(ggplot2)
 
-
-
-
+ggplot(coef_df, aes(x = time)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), fill = "steelblue", alpha = 0.2) +
+  geom_line(aes(y = estimate), color = "steelblue", linewidth = 1) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
+  labs(
+    title = "Time-Varying Effect of Total Use on Stress Level",
+    x = "Time (days since first observation)",
+    y = "Estimated Effect of Total Daily Journey Use on STRESSLEVEL"
+  ) +
+  theme_minimal(base_size = 13)
 
 
 

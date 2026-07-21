@@ -20,6 +20,11 @@ library(stringr)
 library(purrr)
 library(tidyr)
 library(psych)
+library(lme4)
+library(lmerTest)
+library(ggplot2)
+library(ggeffects)
+
 
 Daily_Checks <- read.csv("C:/Users/Owner/Downloads/Daily Checkins.csv")
 
@@ -147,7 +152,7 @@ Comp_DF <- Comp_DF %>%
 
 Comp_DF$ANY_RISK <- ifelse(is.na(Comp_DF$ANY_RISK), 0, Comp_DF$ANY_RISK)
 
-second_cols <- names(Comp_DF)[3:26] 
+second_cols <- names(Comp_DF)[3:30] 
 
 ### Event Totals Between Monthly Assessment Types
 
@@ -189,15 +194,31 @@ Comp_DF <- Comp_DF %>%
 
 ## Subsetting to Monthly and Daily Trend Analysis File
 
-``` {r Subsetting_Monthly}
+``` {r Subsetting_analytic_files}
 
 Monthly_DF <- Comp_DF[which(Comp_DF$MONTHLY == 1), -c(3:30)]  ### Update columns here if needed to remove appropriate vars
 
+Monthly_DF$TOTAL_JOURNEY_USE_M <- rowSums(Monthly_DF[grep("MONTHLY_SUM", names(Monthly_DF))])
+
 Monthly_DF_Risk <- Monthly_DF[which(Monthly_DF$ANY_RISK == 1),]
+
+Monthly_DF_Risk_R <- Monthly_DF_Risk[, -grep("_SUM", names(Monthly_DF_Risk))]
+
+obs_per_person <- table(Monthly_DF_Risk_R$USERID)
+
+Monthly_DF_Risk_Modeling <- Monthly_DF_Risk_R[Monthly_DF_Risk_R$USERID %in% names(obs_per_person[obs_per_person >= 3]), ]
 
 Daily_DF <- Comp_DF[which(Comp_DF$DAILY == 1), -c(3:30)]  ### Update columns here if needed to remove appropriate vars
 
+Daily_DF$TOTAL_JOURNEY_USE_D <- rowSums(Daily_DF[grep("DAILY_SUM", names(Daily_DF))])
+
 Daily_DF_Risk <- Daily_DF[which(Daily_DF$ANY_RISK == 1),]
+
+Daily_DF_Risk_R <- Daily_DF_Risk[, -grep("_SUM", names(Daily_DF_Risk))]
+
+obs_per_person <- table(Daily_DF_Risk_R$USERID)
+
+Daily_DF_Risk_Modeling <- Daily_DF_Risk_R[Daily_DF_Risk_R$USERID %in% names(obs_per_person[obs_per_person >= 3]), ]
 
 ```
 
@@ -293,5 +314,154 @@ Daily_Cors$Predictor <- sub(".*\\.", "", rownames(Daily_Cors))
 Daily_Cors_DF <- do.call(rbind, Cors_list)
 
 rownames(Daily_Cors_DF) <- NULL
+
+```
+
+``` {r monthly_analyses}
+
+###Risk Signals → Journey Use → Improvement
+###Risk Signals → Journey Use → No Improvement
+###Risk Signals → Limited/No Journey Use → Worsening Risk
+
+
+
+
+# Standardize (z-score) TOTAL_JOURNEY_USE_M
+
+Monthly_DF_Risk_Modeling$TOTAL_JOURNEY_USE_M_z <- scale(Monthly_DF_Risk_Modeling$TOTAL_JOURNEY_USE_M)[,1]
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(STRESSLEVEL ~ TOTAL_JOURNEY_USE_M + (1 | USERID), data = Monthly_DF_Risk_Modeling)
+
+summary(model1)
+
+# Random intercept + random slope model: allows the effect of TOTAL_USE_M 
+# to vary by person as well (recommended if you expect individual differences 
+# in how TOTAL_USE_M relates to STRESSLEVEL over time)
+
+
+model2 <- lmer(STRESSLEVEL ~ TOTAL_JOURNEY_USE_M_z + (1 + TOTAL_JOURNEY_USE_M_z | USERID), 
+               data = Monthly_DF_Risk_Modeling)
+
+summary(model2)
+
+# Compare the two models to see if adding the random slope improves fit
+
+anova(model1, model2)
+
+
+
+
+
+
+
+```
+
+``` {r daily_analyses}
+
+###Risk Signals → Journey Use → Improvement
+###Risk Signals → Journey Use → No Improvement
+###Risk Signals → Limited/No Journey Use → Worsening Risk
+
+
+
+# Install and load the tvem and tidyverse packages
+install.packages("tvem")
+install.packages("tidyverse")
+library(tvem)
+library(tidyverse)
+
+# Example formula where the effect of 'predictor1' varies over 'time'
+# grouped by 'subject_id'
+tvem_model <- tvem(
+  formula = outcome ~ predictor1,
+  data = your_dataset,
+  id = subject_id,
+  time = time,
+  family = gaussian() # Use binomial() for binary outcomes
+)
+
+# View the summary of the varying coefficients
+summary(tvem_model)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Standardize (z-score) TOTAL_JOURNEY_USE_M
+
+Daily_DF_Risk_Modeling$TOTAL_JOURNEY_USE_D_z <- scale(Daily_DF_Risk_Modeling$TOTAL_JOURNEY_USE_D)[,1]
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(FEELINGRATING ~ TOTAL_JOURNEY_USE_D + (1 | USERID), data = Daily_DF_Risk_Modeling)
+
+summary(model1)
+
+# Random intercept + random slope model: allows the effect of TOTAL_USE_D 
+# to vary by person as well (recommended if you expect individual differences 
+# in how TOTAL_USE_D relates to FEELINGRATING over time)
+
+
+model2 <- lmer(FEELINGRATING ~ TOTAL_JOURNEY_USE_D_z + (1 + TOTAL_JOURNEY_USE_D_z | USERID), 
+               data = Daily_DF_Risk_Modeling)
+
+summary(model2)
+
+
+
+Daily_DF_Risk_Modeling$DATE_NUMERIC <- as.numeric(Daily_DF_Risk_Modeling$EVENTDATE - min(Daily_DF_Risk_Modeling$EVENTDATE))
+
+model3 <- lmer(FEELINGRATING ~ TOTAL_JOURNEY_USE_D_z + DATE_NUMERIC + (1 + TOTAL_JOURNEY_USE_D_z | USERID), 
+               data = Daily_DF_Risk_Modeling)
+
+summary(model3)
+
+# Compare the two models to see if adding the random slope improves fit
+
+anova(model1, model2, model3)
+
+
+
+
+```
+
+
+
+
+
+``` {r daily_model_plots}
+
+predictions <- ggpredict(model3, terms = "TOTAL_JOURNEY_USE_D_z")
+
+# 3. Plot automatically using ggplot2 logic under the hood
+plot(predictions)
+
+# Alternatively, customize it further with standard ggplot2 layers
+ggplot(predictions, aes(x = x, y = predicted)) +
+  geom_line(color = "blue", size = 1) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2, fill = "blue") +
+  labs(x = "Days", y = "Predicted Reaction Time", title = "Model Fixed Effects")
+
+
+
+
+
+
+
+
 
 ```

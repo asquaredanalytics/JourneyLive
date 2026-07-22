@@ -119,21 +119,29 @@ Comp_DF$DEP_ANX_RISK <- ifelse(Comp_DF$FEELINGSFREQUENCY > 3, 1, 0)
 ### If depression/anxiety increases from Never/Almost never to >= “Sometimes” then RISK
 ### How to define moderate/elevated/high-risk here?
 
-Comp_DF <- Comp_DF %>%
+Comp_DF_Stress <- Comp_DF %>%
 filter(STRESS_RISK == 1) %>%
   group_by(USERID) %>%
   mutate(mean_stresslevel = mean(STRESSLEVEL, na.rm = TRUE)) %>%
   ungroup() %>%
   mutate(STRESS_RISK_GROUP = ntile(mean_stresslevel, 3))
-  
 
-Comp_DF <- Comp_DF %>%
+Comp_DF_Stress <- Comp_DF_Stress[, c("USERID", "STRESS_RISK_GROUP")] %>%
+                  distinct(USERID, .keep_all = TRUE)
+  
+Comp_DF <- merge(Comp_DF, Comp_DF_Stress, by = 'USERID', all.x = TRUE)
+
+Comp_DF_Dep_Anx <- Comp_DF %>%
 filter(DEP_ANX_RISK == 1) %>%
   group_by(USERID) %>%
   mutate(mean_dep_anx = mean(FEELINGSFREQUENCY, na.rm = TRUE)) %>%
   ungroup() %>%
   mutate(DEP_ANX_RISK_GROUP = ntile(mean_dep_anx, 3))
 
+Comp_DF_Dep_Anx <- Comp_DF_Dep_Anx[, c("USERID", "DEP_ANX_RISK_GROUP")] %>%
+                  distinct(USERID, .keep_all = TRUE)
+  
+Comp_DF <- merge(Comp_DF, Comp_DF_Dep_Anx, by = 'USERID', all.x = TRUE)
 
 
 #########   Start Here   ####################
@@ -266,6 +274,18 @@ obs_per_person <- table(Daily_DF_Risk_R$USERID)
 
 Daily_DF_Risk_Modeling <- Daily_DF_Risk_R[Daily_DF_Risk_R$USERID %in% names(obs_per_person[obs_per_person >= 3]), ]
 
+Monthly_Dep_Anx_GRP_1 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$DEP_ANX_RISK_GROUP == 1),]
+
+Monthly_Dep_Anx_GRP_2 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$DEP_ANX_RISK_GROUP == 2),]
+
+Monthly_Dep_Anx_GRP_3 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$DEP_ANX_RISK_GROUP == 3),]
+
+Monthly_Stress_GRP_1 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$STRESS_RISK_GROUP == 1),]
+
+Monthly_Stress_GRP_2 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$STRESS_RISK_GROUP == 2),]
+
+Monthly_Stress_GRP_3 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$STRESS_RISK_GROUP == 3),]
+
 ```
 
 ``` {r sample_size_frequencies}
@@ -371,9 +391,15 @@ rownames(Daily_Cors_DF) <- NULL
 
 # Standardize (z-score) TOTAL_JOURNEY_USE_M
 
+Monthly_DF_Risk_Modeling <- Monthly_DF_Risk_Modeling %>%
+  group_by(USERID) %>%
+  mutate(DATE_NUMERIC = as.numeric(EVENTDATE - min(EVENTDATE)) + 1) %>%
+  ungroup()
+
 Monthly_DF_Risk_Modeling$TOTAL_JOURNEY_USE_M_z <- scale(Monthly_DF_Risk_Modeling$TOTAL_JOURNEY_USE_M)[,1]
 
 # Random intercept model: allows each person to have their own baseline stress level
+
 model1 <- lmer(STRESSLEVEL ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 + TOTAL_JOURNEY_USE_M_z | USERID), data = Monthly_DF_Risk_Modeling)
 
 summary(model1)
@@ -430,7 +456,7 @@ coef_df_D$time <- tvem_model_D$time_grid
 
 library(ggplot2)
 
-ggplot(coef_df, aes(x = time)) +
+ggplot(coef_df_D, aes(x = time)) +
   geom_ribbon(aes(ymin = lower, ymax = upper), fill = "steelblue", alpha = 0.2) +
   geom_line(aes(y = estimate), color = "steelblue", linewidth = 1) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
@@ -456,36 +482,27 @@ ggplot(coef_df, aes(x = time)) +
 
 Daily_DF_Risk_Modeling$TOTAL_JOURNEY_USE_D_z <- scale(Daily_DF_Risk_Modeling$TOTAL_JOURNEY_USE_D)[,1]
 
+Daily_DF_Risk_Modeling <- Daily_DF_Risk_Modeling %>%
+  group_by(USERID) %>%
+  mutate(DATE_NUMERIC = as.numeric(EVENTDATE - min(EVENTDATE)) + 1) %>%
+  ungroup()
+
 # Random intercept model: allows each person to have their own baseline stress level
-model1 <- lmer(FEELINGRATING ~ TOTAL_JOURNEY_USE_D + (1 | USERID), data = Daily_DF_Risk_Modeling)
+model1 <- lmer(FEELINGRATING ~ TOTAL_JOURNEY_USE_D_z + (1 | USERID), data = Daily_DF_Risk_Modeling)
 
 summary(model1)
 
-# Random intercept + random slope model: allows the effect of TOTAL_USE_D 
-# to vary by person as well (recommended if you expect individual differences 
-# in how TOTAL_USE_D relates to FEELINGRATING over time)
-
-
-model2 <- lmer(FEELINGRATING ~ TOTAL_JOURNEY_USE_D_z + (1 + TOTAL_JOURNEY_USE_D_z | USERID), 
-               data = Daily_DF_Risk_Modeling)
+model2 <- lmer(FEELINGRATING ~ TOTAL_JOURNEY_USE_D_z + (1 + TOTAL_JOURNEY_USE_D_z | USERID), data = Daily_DF_Risk_Modeling)
 
 summary(model2)
 
-
-
-Daily_DF_Risk_Modeling$DATE_NUMERIC <- as.numeric(Daily_DF_Risk_Modeling$EVENTDATE - min(Daily_DF_Risk_Modeling$EVENTDATE))
-
-model3 <- lmer(FEELINGRATING ~ TOTAL_JOURNEY_USE_D_z + DATE_NUMERIC + (1 + TOTAL_JOURNEY_USE_D_z | USERID), 
-               data = Daily_DF_Risk_Modeling)
+model3 <- lmer(FEELINGRATING ~ TOTAL_JOURNEY_USE_D_z * DATE_NUMERIC + (1 | USERID), data = Daily_DF_Risk_Modeling)
 
 summary(model3)
 
-# Compare the two models to see if adding the random slope improves fit
+model4 <- lmer(FEELINGRATING ~ TOTAL_JOURNEY_USE_D_z * DATE_NUMERIC + (1 + TOTAL_JOURNEY_USE_D_z | USERID), data = Daily_DF_Risk_Modeling)
 
-anova(model1, model2, model3)
-
-
-
+summary(model4)
 
 ```
 
@@ -520,8 +537,8 @@ ggplot(predictions, aes(x = x, y = predicted)) +
 ``` {r tvem_monthly_test}
 
 tvem_model_M <- tvem(
-  formula = DAYSEMOTIONALLYCHALLENGING ~ TOTAL_JOURNEY_USE_M_z,
-  data = Monthly_DF_Risk_Modeling,
+  formula = STRESSLEVEL ~ TOTAL_JOURNEY_USE_M_z,
+  data = Monthly_Dep_Anx_GRP_1,
   id = USERID,
   time = DATE_NUMERIC,
   family = gaussian() # Use binomial() for binary outcomes
@@ -547,3 +564,307 @@ ggplot(coef_df_M, aes(x = time)) +
 
 
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+``` {r monthly_analyses}
+
+###Risk Signals → Journey Use → Improvement
+###Risk Signals → Journey Use → No Improvement
+###Risk Signals → Limited/No Journey Use → Worsening Risk
+
+# Standardize (z-score) TOTAL_JOURNEY_USE_M
+
+
+Monthly_Dep_Anx_GRP_1 <- Monthly_Dep_Anx_GRP_1 %>%
+  group_by(USERID) %>%
+  mutate(DATE_NUMERIC = as.numeric(EVENTDATE - min(EVENTDATE)) + 1) %>%
+  ungroup()
+
+Monthly_Dep_Anx_GRP_1$TOTAL_JOURNEY_USE_M_z <- scale(Monthly_Dep_Anx_GRP_1$TOTAL_JOURNEY_USE_M)[,1]
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(STRESSLEVEL ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Dep_Anx_GRP_1)
+
+summary(model1)
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(MANAGESTRESSLEVEL ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Dep_Anx_GRP_1)
+
+summary(model1)
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(MANAGEFEELINGSLEVEL ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Dep_Anx_GRP_1)
+
+summary(model1)
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(FEELINGSFREQUENCY ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Dep_Anx_GRP_1)
+
+summary(model1)
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(DAYSEMOTIONALLYCHALLENGING ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Dep_Anx_GRP_1)
+
+summary(model1)
+
+
+
+
+
+
+Monthly_Dep_Anx_GRP_2 <- Monthly_Dep_Anx_GRP_2 %>%
+  group_by(USERID) %>%
+  mutate(DATE_NUMERIC = as.numeric(EVENTDATE - min(EVENTDATE)) + 1) %>%
+  ungroup()
+
+Monthly_Dep_Anx_GRP_2$TOTAL_JOURNEY_USE_M_z <- scale(Monthly_Dep_Anx_GRP_2$TOTAL_JOURNEY_USE_M)[,1]
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(STRESSLEVEL ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Dep_Anx_GRP_2)
+
+summary(model1)
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(MANAGESTRESSLEVEL ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Dep_Anx_GRP_2)
+
+summary(model1)
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(MANAGEFEELINGSLEVEL ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Dep_Anx_GRP_2)
+
+summary(model1)
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(FEELINGSFREQUENCY ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Dep_Anx_GRP_2)
+
+summary(model1)
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(DAYSEMOTIONALLYCHALLENGING ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Dep_Anx_GRP_2)
+
+summary(model1)
+
+
+
+
+
+
+
+
+
+
+
+
+Monthly_Dep_Anx_GRP_3 <- Monthly_Dep_Anx_GRP_3 %>%
+  group_by(USERID) %>%
+  mutate(DATE_NUMERIC = as.numeric(EVENTDATE - min(EVENTDATE)) + 1) %>%
+  ungroup()
+
+Monthly_Dep_Anx_GRP_3$TOTAL_JOURNEY_USE_M_z <- scale(Monthly_Dep_Anx_GRP_3$TOTAL_JOURNEY_USE_M)[,1]
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(STRESSLEVEL ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Dep_Anx_GRP_3)
+
+summary(model1)
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(MANAGESTRESSLEVEL ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Dep_Anx_GRP_3)
+
+summary(model1)
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(MANAGEFEELINGSLEVEL ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Dep_Anx_GRP_3)
+
+summary(model1)
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(FEELINGSFREQUENCY ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Dep_Anx_GRP_3)
+
+summary(model1)
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(DAYSEMOTIONALLYCHALLENGING ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Dep_Anx_GRP_3)
+
+summary(model1)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Monthly_Stress_GRP_1 <- Monthly_Stress_GRP_1 %>%
+  group_by(USERID) %>%
+  mutate(DATE_NUMERIC = as.numeric(EVENTDATE - min(EVENTDATE)) + 1) %>%
+  ungroup()
+
+Monthly_Stress_GRP_1$TOTAL_JOURNEY_USE_M_z <- scale(Monthly_Stress_GRP_1$TOTAL_JOURNEY_USE_M)[,1]
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(STRESSLEVEL ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Stress_GRP_1)
+
+summary(model1)
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(MANAGESTRESSLEVEL ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Stress_GRP_1)
+
+summary(model1)
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(MANAGEFEELINGSLEVEL ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Stress_GRP_1)
+
+summary(model1)
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(FEELINGSFREQUENCY ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Stress_GRP_1)
+
+summary(model1)
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(DAYSEMOTIONALLYCHALLENGING ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Stress_GRP_1)
+
+summary(model1)
+
+
+
+
+
+
+Monthly_Stress_GRP_2 <- Monthly_Stress_GRP_2 %>%
+  group_by(USERID) %>%
+  mutate(DATE_NUMERIC = as.numeric(EVENTDATE - min(EVENTDATE)) + 1) %>%
+  ungroup()
+
+Monthly_Stress_GRP_2$TOTAL_JOURNEY_USE_M_z <- scale(Monthly_Stress_GRP_2$TOTAL_JOURNEY_USE_M)[,1]
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(STRESSLEVEL ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Stress_GRP_2)
+
+summary(model1)
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(MANAGESTRESSLEVEL ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Stress_GRP_2)
+
+summary(model1)
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(MANAGEFEELINGSLEVEL ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Stress_GRP_2)
+
+summary(model1)
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(FEELINGSFREQUENCY ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Stress_GRP_2)
+
+summary(model1)
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(DAYSEMOTIONALLYCHALLENGING ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Stress_GRP_2)
+
+summary(model1)
+
+
+
+
+
+
+
+
+
+
+
+
+Monthly_Stress_GRP_3 <- Monthly_Stress_GRP_3 %>%
+  group_by(USERID) %>%
+  mutate(DATE_NUMERIC = as.numeric(EVENTDATE - min(EVENTDATE)) + 1) %>%
+  ungroup()
+
+Monthly_Stress_GRP_3$TOTAL_JOURNEY_USE_M_z <- scale(Monthly_Stress_GRP_3$TOTAL_JOURNEY_USE_M)[,1]
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(STRESSLEVEL ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Stress_GRP_3)
+
+summary(model1)
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(MANAGESTRESSLEVEL ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Stress_GRP_3)
+
+summary(model1)
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(MANAGEFEELINGSLEVEL ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Stress_GRP_3)
+
+summary(model1)
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(FEELINGSFREQUENCY ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Stress_GRP_3)
+
+summary(model1)
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(DAYSEMOTIONALLYCHALLENGING ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Stress_GRP_3)
+
+summary(model1)
+
+```
+
+Monthly_Dep_Anx_GRP_1 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$DEP_ANX_RISK_GROUP == 1),]
+
+Monthly_Dep_Anx_GRP_2 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$DEP_ANX_RISK_GROUP == 2),]
+
+Monthly_Dep_Anx_GRP_3 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$DEP_ANX_RISK_GROUP == 3),]
+
+Monthly_Stress_GRP_1 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$STRESS_RISK_GROUP == 1),]
+
+Monthly_Stress_GRP_2 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$STRESS_RISK_GROUP == 2),]
+
+Monthly_Stress_GRP_3 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$STRESS_RISK_GROUP == 3),]
+
+
+
+
+
+
+Monthly_Dep_Anx_GRP_3 <- Monthly_Dep_Anx_GRP_3 %>%
+  group_by(USERID) %>%
+  mutate(DATE_NUMERIC = as.numeric(EVENTDATE - min(EVENTDATE)) + 1) %>%
+  ungroup()
+
+Monthly_Dep_Anx_GRP_3$TOTAL_JOURNEY_USE_M_z <- scale(Monthly_Dep_Anx_GRP_3$TOTAL_JOURNEY_USE_M)[,1]
+
+# Random intercept model: allows each person to have their own baseline stress level
+model1 <- lmer(STRESSLEVEL ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Dep_Anx_GRP_3)
+
+summary(model1)

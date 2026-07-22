@@ -313,7 +313,7 @@ Monthly_Stress_GRP_3 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$
 
 
 ### Based on the information Journey has provided, there appear to be approximately 6,700 participants with repeated assessment ### data and roughly 10,600 participants with repeated daily check-ins.
-
+d
 
 Comp_DF %>%
   count(USERID) %>%

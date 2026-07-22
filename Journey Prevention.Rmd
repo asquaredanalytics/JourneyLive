@@ -147,12 +147,12 @@ Comp_DF <- merge(Comp_DF, Comp_DF_Dep_Anx, by = 'USERID', all.x = TRUE)
 #########   Start Here   ####################
 
 ### For bad day risk bucketing, maybe look at frequency of occurrences for individuals
-Comp_DF <- Comp_DF %>%
-filter(BAD_DAY_RISK == 1) %>%
-  group_by(USERID) %>%
-  mutate(mean_stresslevel = mean(STRESSLEVEL, na.rm = TRUE),
-         STRESS_RISK_GROUP = ntile(mean_stresslevel, 3)) %>%
-  ungroup()
+#Comp_DF <- Comp_DF %>%
+#filter(BAD_DAY_RISK == 1) %>%
+#  group_by(USERID) %>%
+#  mutate(mean_stresslevel = mean(STRESSLEVEL, na.rm = TRUE),
+#         STRESS_RISK_GROUP = ntile(mean_stresslevel, 3)) %>%
+#  ungroup()
 
 
 
@@ -200,6 +200,7 @@ Comp_DF <- Comp_DF %>%
   ungroup() %>%
   arrange(USERID, EVENTDATE)
 
+Comp_DF$PERIOD_RISK <- Comp_DF$ANY_RISK
 
 ### How to define moderate/elevated/high-risk for those who indicate a drop in ability to cope (COPING_DECREASED)
 
@@ -921,4 +922,62 @@ summary(model1)
 testdf <- Comp_DF[which(!is.na(Comp_DF$STRESS_INCREASED)),]
 
 testdf <- testdf[, -c(3:30,55:110)]
+
+subset_data <- testdf %>%
+  group_by(USERID) %>%
+  filter(any(ANY_RISK == 0)) %>%
+  ungroup()
+
+
+
+
+
+
+
+
+testdf1 <- testdf %>%
+  arrange(USERID, EVENTDATE) %>%              # make sure rows are in time order within person
+  group_by(USERID) %>%
+  summarise(
+    had_zero = any(ANY_RISK == 0),
+    had_zero_then_one = any(ANY_RISK == 1 & cummax(ANY_RISK == 0 & row_number() < which(ANY_RISK == 1)[1]))
+  )
+
+
+
+
+
+testdf$EVENTDATE <- 
+
+
+transitioned_users <- testdf %>%
+  arrange(USERID, EVENTDATE) %>%
+  group_by(USERID) %>%
+  mutate(ever_zero_so_far = cummax(ANY_RISK == 0)) %>%
+  filter(ANY_RISK == 1 & lag(ever_zero_so_far, default = FALSE)) %>%
+  ungroup() %>%
+  distinct(USERID) %>%
+  pull(USERID)
+
+# Step 2: Subset to keep ALL rows for those USERIDs
+transitioned_data <- testdf %>%
+  filter(USERID %in% transitioned_users)
+
+# Quick checks
+length(transitioned_users)               # number of people who transitioned
+length(unique(transitioned_data$USERID)) # should match the above
+table(transitioned_data$ANY_RISK)        # should include both 0s and 1s
+
+sum(is.na(transitioned_data$ANY_RISK))
+
+
+
+
+
+
+
+
+
+
+
 ```

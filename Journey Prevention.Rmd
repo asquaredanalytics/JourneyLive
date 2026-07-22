@@ -265,11 +265,51 @@ Comp_DF <- Comp_DF %>%
     ~ lag(.x)
   ))
 
+Comp_DF$Comp_JOURNEY_USE_M <- rowSums(Comp_DF[grep("MONTHLY_SUM", names(Comp_DF))])
+
+Comp_DF$Comp_JOURNEY_USE_D <- rowSums(Comp_DF[grep("DAILY_SUM", names(Comp_DF))])
+
 ```
 
 ## Subsetting to Monthly and Daily Trend Analysis File
 
 ``` {r Subsetting_analytic_files}
+
+### Creating data file for those who start as Not-at-Risk and later transition to At-Risk
+
+Transitioned_Data <- Comp_DF
+
+Transitioned_Data <- Transitioned_Data[, -c(3:30,56:111)]
+
+Transitioned_Users <- Transitioned_Data %>%
+  arrange(USERID, EVENTDATE) %>%
+  group_by(USERID) %>%
+  mutate(ever_zero_so_far = cummax(PERIOD_RISK == 0)) %>%
+  filter(PERIOD_RISK == 1 & lag(ever_zero_so_far, default = FALSE)) %>%
+  ungroup() %>%
+  distinct(USERID) %>%
+  pull(USERID)
+
+# Step 2: Subset to keep ALL rows for those USERIDs
+Transitioned_Data <- Transitioned_Data %>%
+  filter(USERID %in% Transitioned_Users)
+
+Transitioned_Data <- Transitioned_Data %>%
+  arrange(USERID, EVENTDATE) %>%
+  group_by(USERID) %>%
+  mutate(
+    period = cumsum(!is.na(MONTHLY))  # increments every time a MONTHLY checkpoint is hit
+  ) %>%
+  ungroup()
+
+period_use_sums <- Transitioned_Data %>%
+  group_by(USERID, period) %>%
+  summarise(Comp_JOURNEY_USE_SUM = sum(Comp_JOURNEY_USE_D, na.rm = TRUE), .groups = "drop")
+
+Transitioned_Data <- Transitioned_Data %>%
+  left_join(period_use_sums, by = c("USERID", "period"))
+
+
 
 Monthly_DF <- Comp_DF[which(Comp_DF$MONTHLY == 1), -c(3:30)]  ### Update columns here if needed to remove appropriate vars
 
@@ -937,34 +977,6 @@ testdf <- testdf[, -c(27:82)]
 model1 <- lmer(TOTAL_JOURNEY_USE_M_z ~ ANY_RISK + (1 | USERID), data = testdf)
 
 summary(model1)
-
-
-testdf <- Comp_DF#[which(!is.na(Comp_DF$STRESS_INCREASED)),]
-
-testdf <- testdf[, -c(3:30,56:111)]
-
-transitioned_users <- testdf %>%
-  arrange(USERID, EVENTDATE) %>%
-  group_by(USERID) %>%
-  mutate(ever_zero_so_far = cummax(PERIOD_RISK == 0)) %>%
-  filter(PERIOD_RISK == 1 & lag(ever_zero_so_far, default = FALSE)) %>%
-  ungroup() %>%
-  distinct(USERID) %>%
-  pull(USERID)
-
-# Step 2: Subset to keep ALL rows for those USERIDs
-transitioned_data <- testdf %>%
-  filter(USERID %in% transitioned_users)
-
-# Quick checks
-length(transitioned_users)               # number of people who transitioned
-length(unique(transitioned_data$USERID)) # should match the above
-table(transitioned_data$ANY_RISK)        # should include both 0s and 1s
-
-sum(is.na(transitioned_data$ANY_RISK))
-
-
-
 
 
 

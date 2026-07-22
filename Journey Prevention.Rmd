@@ -195,17 +195,37 @@ Comp_DF <- Comp_DF %>%
     COPING_DECREASED = as.integer(MANAGESTRESSLEVEL < BASELINE_COPING & EVENTDATE != min(EVENTDATE)),
     DAYS_CHALLENGING_INCREASED = as.integer(DAYSEMOTIONALLYCHALLENGING > BASELINE_CHALLENGING & EVENTDATE != min(EVENTDATE)),
     DEP_ANX_INCREASED = as.integer(FEELINGSFREQUENCY > BASELINE_DEP_ANX & EVENTDATE != min(EVENTDATE)),
-    ANY_RISK = as.integer(any(BAD_DAY_RISK == 1, STRESS_RISK == 1, DEP_ANX_RISK == 1, CHALLENGING_DAYS_RISK == 1, MANAGE_STRESS_RISK == 1, STRESS_INCREASED == 1, COPING_DECREASED == 1, DAYS_CHALLENGING_INCREASED == 1, DEP_ANX_INCREASED == 1, na.rm = TRUE))
+    PERIOD_RISK = as.integer(
+      (BAD_DAY_RISK == 1) |
+        (STRESS_RISK == 1) |
+        (DEP_ANX_RISK == 1) |
+        (CHALLENGING_DAYS_RISK == 1) |
+        (MANAGE_STRESS_RISK == 1) |
+        (STRESS_INCREASED == 1) |
+        (COPING_DECREASED == 1) |
+        (DAYS_CHALLENGING_INCREASED == 1) |
+        (DEP_ANX_INCREASED == 1)
+    ),
+    ANY_RISK = as.integer(
+      any(BAD_DAY_RISK == 1,
+          STRESS_RISK == 1,
+          DEP_ANX_RISK == 1,
+          CHALLENGING_DAYS_RISK == 1,
+          MANAGE_STRESS_RISK == 1,
+          STRESS_INCREASED == 1,
+          COPING_DECREASED == 1,
+          DAYS_CHALLENGING_INCREASED == 1,
+          DEP_ANX_INCREASED == 1,
+          na.rm = TRUE))
   ) %>%
   ungroup() %>%
   arrange(USERID, EVENTDATE)
 
-Comp_DF$PERIOD_RISK <- Comp_DF$ANY_RISK
-
 ### How to define moderate/elevated/high-risk for those who indicate a drop in ability to cope (COPING_DECREASED)
 
-
 Comp_DF$ANY_RISK <- ifelse(is.na(Comp_DF$ANY_RISK), 0, Comp_DF$ANY_RISK)
+
+Comp_DF$PERIOD_RISK <- ifelse(is.na(Comp_DF$PERIOD_RISK), 0, Comp_DF$PERIOD_RISK)
 
 second_cols <- names(Comp_DF)[3:30] 
 
@@ -919,42 +939,15 @@ model1 <- lmer(TOTAL_JOURNEY_USE_M_z ~ ANY_RISK + (1 | USERID), data = testdf)
 summary(model1)
 
 
-testdf <- Comp_DF[which(!is.na(Comp_DF$STRESS_INCREASED)),]
+testdf <- Comp_DF#[which(!is.na(Comp_DF$STRESS_INCREASED)),]
 
-testdf <- testdf[, -c(3:30,55:110)]
-
-subset_data <- testdf %>%
-  group_by(USERID) %>%
-  filter(any(ANY_RISK == 0)) %>%
-  ungroup()
-
-
-
-
-
-
-
-
-testdf1 <- testdf %>%
-  arrange(USERID, EVENTDATE) %>%              # make sure rows are in time order within person
-  group_by(USERID) %>%
-  summarise(
-    had_zero = any(ANY_RISK == 0),
-    had_zero_then_one = any(ANY_RISK == 1 & cummax(ANY_RISK == 0 & row_number() < which(ANY_RISK == 1)[1]))
-  )
-
-
-
-
-
-testdf$EVENTDATE <- 
-
+testdf <- testdf[, -c(3:30,56:111)]
 
 transitioned_users <- testdf %>%
   arrange(USERID, EVENTDATE) %>%
   group_by(USERID) %>%
-  mutate(ever_zero_so_far = cummax(ANY_RISK == 0)) %>%
-  filter(ANY_RISK == 1 & lag(ever_zero_so_far, default = FALSE)) %>%
+  mutate(ever_zero_so_far = cummax(PERIOD_RISK == 0)) %>%
+  filter(PERIOD_RISK == 1 & lag(ever_zero_so_far, default = FALSE)) %>%
   ungroup() %>%
   distinct(USERID) %>%
   pull(USERID)

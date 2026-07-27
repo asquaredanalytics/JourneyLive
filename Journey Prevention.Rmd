@@ -26,6 +26,7 @@ library(ggplot2)
 library(ggeffects)
 library(tvem)
 library(tidyverse)
+library(lubridate)
 
 Daily_Checks <- read.csv("C:/Users/Owner/Downloads/Daily Checkins.csv")
 
@@ -1132,7 +1133,6 @@ summary(testmodel)
 
 
 
-library(lubridate)
 
 abc <- Monthly_Risk_Transition
 
@@ -1248,9 +1248,57 @@ abc_risk_subset <- abc_risk_subset %>%
   slice(1) %>%
   ungroup()
 
-abc123 <- abc_risk_subset[which(abc_risk_subset$USERID == 73833 & abc_risk_subset$EVENTDATE >= '2021-09-01' & abc_risk_subset$EVENTDATE <= '2022-03-18'),]
+abc_risk_subset <- abc_risk_subset[which(abc_risk_subset$START_RISK == 1 | !is.na(abc_risk_subset$END_RISK)),]
+
+abc_risk_subset <- abc_risk_subset %>%
+  distinct(USERID, EVENTDATE, .keep_all = TRUE)
+
+Monthly_DF_Outcome_Join <- Monthly_DF[,c("USERID", "EVENTDATE", "TOTAL_JOURNEY_USE_M")]
+
+six_month_risk_outcomes <- abc_risk_subset
+
+six_month_risk_outcomes$EVENTDATE_COPY <- six_month_risk_outcomes$EVENTDATE
+
+six_month_risk_outcomes <- six_month_risk_outcomes[, c("USERID", "EVENTDATE", "EVENTDATE_COPY")]
+
+six_month_risk_outcomes <- merge(six_month_risk_outcomes, Monthly_DF_Outcome_Join, by = c("USERID", "EVENTDATE"), all = TRUE)
 
 
-aaa <- Comp_DF[which(Comp_DF$USERID == 73833 & Comp_DF$PERIOD == 1),]
+six_month_risk_outcomes$EVENTDATE      <- as.Date(six_month_risk_outcomes$EVENTDATE,      format = "%Y-%m-%d")
+six_month_risk_outcomes$EVENTDATE_COPY <- as.Date(six_month_risk_outcomes$EVENTDATE_COPY, format = "%Y-%m-%d")
+
+# ---- 2. Build SUM_JOURNEY_USE_M -------------------------------------------
+six_month_risk_outcomes <- six_month_risk_outcomes %>%
+  arrange(USERID, EVENTDATE) %>%   # make sure rows are in date order within USERID
+  group_by(USERID) %>%
+  mutate(
+    .rn = row_number(),
+
+    # position (row number within the USERID group) of the FIRST row
+    # where EVENTDATE_COPY is populated
+    .first_pop = suppressWarnings(min(.rn[!is.na(EVENTDATE_COPY)])),
+    .first_pop = ifelse(is.infinite(.first_pop), NA_integer_, .first_pop),
+
+    # position of the SECOND row where EVENTDATE_COPY is populated
+    # (NA if there is no second populated row for this USERID)
+    .second_pop = {
+      pop_positions <- sort(.rn[!is.na(EVENTDATE_COPY)])
+      if (length(pop_positions) >= 2) pop_positions[2] else NA_integer_
+    },
+
+    # last row to include in the sum: the row right before the second
+    # populated row, or the last row of the USERID's data if there is
+    # no second populated row
+    .end_row = ifelse(!is.na(.second_pop), .second_pop - 1L, max(.rn)),
+
+    SUM_JOURNEY_USE_M = ifelse(
+      !is.na(.first_pop) & .rn == .first_pop,
+      sum(TOTAL_JOURNEY_USE_M[.rn >= .first_pop & .rn <= .end_row],
+          na.rm = TRUE),
+      NA_real_
+    )
+  ) %>%
+  ungroup() %>%
+  select(-.rn, -.first_pop, -.second_pop, -.end_row)
 
 ```

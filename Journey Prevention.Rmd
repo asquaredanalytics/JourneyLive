@@ -27,6 +27,7 @@ library(ggeffects)
 library(tvem)
 library(tidyverse)
 library(lubridate)
+library(gtsummary)
 
 Daily_Checks <- read.csv("C:/Users/Owner/Downloads/Daily Checkins.csv")
 
@@ -71,7 +72,8 @@ Comp_DF <- Comp_DF[,-c(35,36,39)]
 
 Comp_DF$EVENTDATE <- as.Date(Comp_DF$EVENTDATE)
 
-###write.csv(Comp_DF, "C:/Users/Owner/Downloads/TEST.csv", row.names = FALSE)
+test1 <- Monthly_Risk_Transition[1:1000,]
+#write.csv(test1, "C:/Users/Owner/Downloads/TEST1.csv", row.names = FALSE)
 
 ```
 
@@ -158,18 +160,9 @@ Comp_DF <- merge(Comp_DF, Comp_DF_Dep_Anx, by = 'USERID', all.x = TRUE)
 
 
 
-
-
-
 Comp_DF$CHALLENGING_DAYS_RISK <- ifelse(Comp_DF$DAYSEMOTIONALLYCHALLENGING > 0, 1, 0)
 
-#Comp_DF$BAD_DAY_RISK <- ifelse(is.na(Comp_DF$BAD_DAY_RISK), 0, Comp_DF$BAD_DAY_RISK)
-
 Comp_DF$MANAGE_STRESS_RISK <- ifelse(Comp_DF$MANAGESTRESSLEVEL <= 3, 1, 0)
-
-#Comp_DF$BAD_DAY_RISK <- ifelse(is.na(Comp_DF$BAD_DAY_RISK), 0, Comp_DF$BAD_DAY_RISK)
-
-#Comp_DF$RISK <- ifelse(Comp_DF$FEELINGRATING == 1 | Comp_DF$STRESSLEVEL > 5 | Comp_DF$DAYSEMOTIONALLYCHALLENGING > 0 | Comp_DF$MANAGESTRESSLEVEL <= 3, 1, 0)
 
 Comp_DF <- Comp_DF %>%
   group_by(USERID) %>%
@@ -334,7 +327,6 @@ Monthly_Stress_GRP_3 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$
 
 ``` {r sample_size_frequencies}
 
-
 ### Based on the information Journey has provided, there appear to be approximately 6,700 participants with repeated assessment ### data and roughly 10,600 participants with repeated daily check-ins.
 
 
@@ -370,8 +362,720 @@ Monthly_Assessments %>%
   filter(sum_daily > 1 & sum_monthly > 1) %>%
   summarise(distinct_users = n())
 
+```
+
+# Case Counts
+
+```{r case_counts_risk_transition}
+
+abc <- Monthly_Risk_Transition %>%
+  mutate(EVENTDATE = as.Date(EVENTDATE)) %>%
+  group_by(USERID) %>%
+  mutate(
+    .start_date = suppressWarnings(min(EVENTDATE[PERIOD_RISK == 1], na.rm = TRUE)),
+    .start_date = as.Date(ifelse(is.infinite(.start_date), NA, .start_date), origin = "1970-01-01"),
+    START_RISK  = as.integer(!is.na(.start_date) & PERIOD_RISK == 1 & EVENTDATE == .start_date)
+  ) %>%
+  ungroup()
+
+# ---------------------------------------------------------------------
+# 2. build_end_risk(): computes END_RISK for an arbitrary follow-up
+#    window of `target_months` after START_RISK.
+#    ASSUMPTION: window = [target_months - 1, target_months + 1], with
+#    the tie-break at exactly `target_months` -- generalizing the
+#    original 6-month rule (5-7 month window, tie-break at 6).
+# ---------------------------------------------------------------------
+build_end_risk <- function(data, target_months) {
+  data <- data %>%
+    group_by(USERID) %>%
+    mutate(
+      .in_window = !is.na(.start_date) &
+        EVENTDATE >= .start_date %m+% months(target_months - 1) &
+        EVENTDATE <= .start_date %m+% months(target_months + 1),
+
+      .end1_date = suppressWarnings(min(
+        EVENTDATE[.in_window & PERIOD_RISK == 1 & !is.na(MONTHLY) & MONTHLY == 1],
+        na.rm = TRUE
+      )),
+      .end1_date = as.Date(ifelse(is.infinite(.end1_date), NA, .end1_date), origin = "1970-01-01")
+    ) %>%
+    ungroup()
+
+  period_clean <- data %>%
+    filter(.in_window) %>%
+    group_by(USERID, PERIOD) %>%
+    summarise(.period_all_zero = all(!is.na(PERIOD_RISK) & PERIOD_RISK == 0), .groups = "drop")
+
+  data <- data %>% left_join(period_clean, by = c("USERID", "PERIOD"))
+
+  max_clean_period <- data %>%
+    filter(.in_window, .period_all_zero) %>%
+    group_by(USERID) %>%
+    summarise(.max_period0 = max(PERIOD), .groups = "drop")
+
+  data %>%
+    left_join(max_clean_period, by = "USERID") %>%
+    group_by(USERID) %>%
+    mutate(
+      .end0_date = suppressWarnings(min(
+        EVENTDATE[.in_window & !is.na(.max_period0) & PERIOD == .max_period0 &
+                    !is.na(MONTHLY) & MONTHLY == 1],
+        na.rm = TRUE
+      )),
+      .end0_date = as.Date(ifelse(is.infinite(.end0_date), NA, .end0_date), origin = "1970-01-01"),
+
+      # tie-break: keep whichever candidate is closest to `target_months`
+      .target_mark = .start_date %m+% months(target_months),
+      .dist1 = abs(as.numeric(.end1_date - .target_mark)),
+      .dist0 = abs(as.numeric(.end0_date - .target_mark)),
+      .keep1 = !is.na(.end1_date) & (is.na(.end0_date) | .dist1 <= .dist0),
+      .keep0 = !is.na(.end0_date) & (is.na(.end1_date) | .dist0 <  .dist1),
+
+      END_RISK = case_when(
+        .keep1 & PERIOD_RISK == 1 & !is.na(MONTHLY) & MONTHLY == 1 & EVENTDATE == .end1_date ~ 1L,
+        .keep0 & PERIOD_RISK == 0 & !is.na(MONTHLY) & MONTHLY == 1 & EVENTDATE == .end0_date ~ 0L,
+        TRUE ~ NA_integer_
+      )
+    ) %>%
+    ungroup() %>%
+    select(-starts_with("."))
+}
+
+# ---------------------------------------------------------------------
+# 3. build_outcome_table(): from a data frame that already has
+#    START_RISK + END_RISK for one follow-up window, produces one row
+#    per USERID with START_RISK, END_RISK_<suffix>, and
+#    SUM_JOURNEY_USE_M_<suffix>
+# ---------------------------------------------------------------------
+build_outcome_table <- function(data_with_end_risk, monthly_df, suffix) {
+
+  risk_subset <- data_with_end_risk %>%
+    group_by(USERID) %>%
+    filter(any(START_RISK == 1, na.rm = TRUE) & any(!is.na(END_RISK))) %>%
+    ungroup() %>%
+    arrange(USERID, PERIOD, EVENTDATE) %>%
+    group_by(USERID, PERIOD) %>%
+    slice(1) %>%
+    ungroup() %>%
+    filter(START_RISK == 1 | !is.na(END_RISK)) %>%
+    distinct(USERID, EVENTDATE, .keep_all = TRUE)
+
+  sum_journey <- risk_subset %>%
+    transmute(USERID, EVENTDATE, EVENTDATE_COPY = EVENTDATE) %>%
+    full_join(monthly_df[, c("USERID", "EVENTDATE", "TOTAL_JOURNEY_USE_M")],
+              by = c("USERID", "EVENTDATE")) %>%
+    mutate(EVENTDATE = as.Date(EVENTDATE), EVENTDATE_COPY = as.Date(EVENTDATE_COPY)) %>%
+    arrange(USERID, EVENTDATE) %>%
+    group_by(USERID) %>%
+    mutate(
+      .rn         = row_number(),
+      .first_pop  = suppressWarnings(min(.rn[!is.na(EVENTDATE_COPY)])),
+      .first_pop  = ifelse(is.infinite(.first_pop), NA_integer_, .first_pop),
+      .second_pop = {
+        pos <- sort(.rn[!is.na(EVENTDATE_COPY)])
+        if (length(pos) >= 2) pos[2] else NA_integer_
+      },
+      .end_row    = ifelse(!is.na(.second_pop), .second_pop - 1L, max(.rn)),
+      SUM_JOURNEY_USE_M = ifelse(
+        !is.na(.first_pop) & .rn == .first_pop,
+        sum(TOTAL_JOURNEY_USE_M[.rn >= .first_pop & .rn <= .end_row], na.rm = TRUE),
+        NA_real_
+      )
+    ) %>%
+    ungroup() %>%
+    select(-starts_with("."))
+
+  out <- risk_subset %>%
+    mutate(END_RISK_final = lead(END_RISK)) %>%
+    arrange(USERID, EVENTDATE) %>%
+    group_by(USERID) %>%
+    slice(1) %>%
+    ungroup() %>%
+    select(USERID, START_RISK, END_RISK_final) %>%
+    left_join(
+      sum_journey %>% filter(!is.na(SUM_JOURNEY_USE_M)) %>% select(USERID, SUM_JOURNEY_USE_M),
+      by = "USERID"
+    )
+
+  names(out)[names(out) == "END_RISK_final"]   <- paste0("END_RISK_", suffix)
+  names(out)[names(out) == "SUM_JOURNEY_USE_M"] <- paste0("SUM_JOURNEY_USE_M_", suffix)
+
+  out
+}
+
+# ---------------------------------------------------------------------
+# 4. Build the 3-, 6-, and 12-month outcome tables and combine
+# ---------------------------------------------------------------------
+outcomes_3  <- build_outcome_table(build_end_risk(abc, 3),  Monthly_DF, "3")
+outcomes_6  <- build_outcome_table(build_end_risk(abc, 6),  Monthly_DF, "6")
+outcomes_12 <- build_outcome_table(build_end_risk(abc, 12), Monthly_DF, "12")
+
+six_month_outcomes <- outcomes_3 %>%
+  full_join(outcomes_6  %>% select(-START_RISK), by = "USERID") %>%
+  full_join(outcomes_12 %>% select(-START_RISK), by = "USERID") %>%
+  select(USERID, START_RISK,
+         END_RISK_3,  SUM_JOURNEY_USE_M_3,
+         END_RISK_6,  SUM_JOURNEY_USE_M_6,
+         END_RISK_12, SUM_JOURNEY_USE_M_12)
+
+# ---------------------------------------------------------------------
+# 5. Correlations for each follow-up window
+# ---------------------------------------------------------------------
+corr.test(six_month_outcomes$END_RISK_3,  six_month_outcomes$SUM_JOURNEY_USE_M_3,  method = "pearson")
+corr.test(six_month_outcomes$END_RISK_6,  six_month_outcomes$SUM_JOURNEY_USE_M_6,  method = "pearson")
+corr.test(six_month_outcomes$END_RISK_12, six_month_outcomes$SUM_JOURNEY_USE_M_12, method = "pearson")
 
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+``` {r monthly_case_counts}
+
+abc <- Monthly_Risk_Transition %>%
+  mutate(EVENTDATE = as.Date(EVENTDATE)) %>%
+  group_by(USERID) %>%
+  mutate(
+    .baseline_date = min(EVENTDATE, na.rm = TRUE),
+
+    .start_window = !is.na(.baseline_date) &
+      EVENTDATE >= .baseline_date %m+% months(5) &
+      EVENTDATE <= .baseline_date %m+% months(7),
+
+    .start_date = suppressWarnings(min(
+      EVENTDATE[.start_window & !is.na(PERIOD_RISK) & PERIOD_RISK == 1],
+      na.rm = TRUE
+    )),
+    .start_date = as.Date(ifelse(is.infinite(.start_date), NA, .start_date), origin = "1970-01-01"),
+
+    START_RISK = as.integer(!is.na(.start_date) & PERIOD_RISK == 1 & EVENTDATE == .start_date)
+  ) %>%
+  ungroup()
+
+# ---------------------------------------------------------------------
+# 2. build_end_risk(): computes END_RISK for an arbitrary follow-up
+#    window of `target_months` after START_RISK.
+#    window = [target_months - 1, target_months + 1], tie-break at
+#    exactly `target_months`.
+# ---------------------------------------------------------------------
+build_end_risk <- function(data, target_months) {
+  data <- data %>%
+    group_by(USERID) %>%
+    mutate(
+      .in_window = !is.na(.start_date) &
+        EVENTDATE >= .start_date %m+% months(target_months - 1) &
+        EVENTDATE <= .start_date %m+% months(target_months + 1),
+
+      .end1_date = suppressWarnings(min(
+        EVENTDATE[.in_window & PERIOD_RISK == 1 & !is.na(MONTHLY) & MONTHLY == 1],
+        na.rm = TRUE
+      )),
+      .end1_date = as.Date(ifelse(is.infinite(.end1_date), NA, .end1_date), origin = "1970-01-01")
+    ) %>%
+    ungroup()
+
+  period_clean <- data %>%
+    filter(.in_window) %>%
+    group_by(USERID, PERIOD) %>%
+    summarise(.period_all_zero = all(!is.na(PERIOD_RISK) & PERIOD_RISK == 0), .groups = "drop")
+
+  data <- data %>% left_join(period_clean, by = c("USERID", "PERIOD"))
+
+  max_clean_period <- data %>%
+    filter(.in_window, .period_all_zero) %>%
+    group_by(USERID) %>%
+    summarise(.max_period0 = max(PERIOD), .groups = "drop")
+
+  data %>%
+    left_join(max_clean_period, by = "USERID") %>%
+    group_by(USERID) %>%
+    mutate(
+      .end0_date = suppressWarnings(min(
+        EVENTDATE[.in_window & !is.na(.max_period0) & PERIOD == .max_period0 &
+                    !is.na(MONTHLY) & MONTHLY == 1],
+        na.rm = TRUE
+      )),
+      .end0_date = as.Date(ifelse(is.infinite(.end0_date), NA, .end0_date), origin = "1970-01-01"),
+
+      # tie-break: keep whichever candidate is closest to `target_months`
+      .target_mark = .start_date %m+% months(target_months),
+      .dist1 = abs(as.numeric(.end1_date - .target_mark)),
+      .dist0 = abs(as.numeric(.end0_date - .target_mark)),
+      .keep1 = !is.na(.end1_date) & (is.na(.end0_date) | .dist1 <= .dist0),
+      .keep0 = !is.na(.end0_date) & (is.na(.end1_date) | .dist0 <  .dist1),
+
+      END_RISK = case_when(
+        .keep1 & PERIOD_RISK == 1 & !is.na(MONTHLY) & MONTHLY == 1 & EVENTDATE == .end1_date ~ 1L,
+        .keep0 & PERIOD_RISK == 0 & !is.na(MONTHLY) & MONTHLY == 1 & EVENTDATE == .end0_date ~ 0L,
+        TRUE ~ NA_integer_
+      )
+    ) %>%
+    ungroup() %>%
+    select(-starts_with("."))
+}
+
+# ---------------------------------------------------------------------
+# 3. build_outcome_table(): from a data frame that already has
+#    START_RISK + END_RISK for one follow-up window, produces one row
+#    per USERID with START_RISK, END_RISK_<suffix>,
+#    SUM_JOURNEY_USE_M_<suffix>, and each of `score_cols` measured AT
+#    the END_RISK marker's EVENTDATE (named "<col>_AT_END_RISK_<suffix>")
+# ---------------------------------------------------------------------
+build_outcome_table <- function(data_with_end_risk, monthly_df, suffix, score_cols) {
+
+  risk_subset <- data_with_end_risk %>%
+    group_by(USERID) %>%
+    filter(any(START_RISK == 1, na.rm = TRUE) & any(!is.na(END_RISK))) %>%
+    ungroup() %>%
+    arrange(USERID, PERIOD, EVENTDATE) %>%
+    group_by(USERID, PERIOD) %>%
+    slice(1) %>%
+    ungroup() %>%
+    filter(START_RISK == 1 | !is.na(END_RISK)) %>%
+    distinct(USERID, EVENTDATE, .keep_all = TRUE)
+
+  sum_journey <- risk_subset %>%
+    transmute(USERID, EVENTDATE, EVENTDATE_COPY = EVENTDATE) %>%
+    full_join(monthly_df[, c("USERID", "EVENTDATE", "TOTAL_JOURNEY_USE_M")],
+              by = c("USERID", "EVENTDATE")) %>%
+    mutate(EVENTDATE = as.Date(EVENTDATE), EVENTDATE_COPY = as.Date(EVENTDATE_COPY)) %>%
+    arrange(USERID, EVENTDATE) %>%
+    group_by(USERID) %>%
+    mutate(
+      .rn         = row_number(),
+      .first_pop  = suppressWarnings(min(.rn[!is.na(EVENTDATE_COPY)])),
+      .first_pop  = ifelse(is.infinite(.first_pop), NA_integer_, .first_pop),
+      .second_pop = {
+        pos <- sort(.rn[!is.na(EVENTDATE_COPY)])
+        if (length(pos) >= 2) pos[2] else NA_integer_
+      },
+      .end_row    = ifelse(!is.na(.second_pop), .second_pop - 1L, max(.rn)),
+      SUM_JOURNEY_USE_M = ifelse(
+        !is.na(.first_pop) & .rn == .first_pop,
+        sum(TOTAL_JOURNEY_USE_M[.rn >= .first_pop & .rn <= .end_row], na.rm = TRUE),
+        NA_real_
+      )
+    ) %>%
+    ungroup() %>%
+    select(-starts_with("."))
+
+  score_end_names <- paste0(score_cols, "_AT_END_RISK_", suffix)
+
+  out <- risk_subset %>%
+    arrange(USERID, EVENTDATE) %>%
+    group_by(USERID) %>%
+    mutate(
+      END_RISK_final = lead(END_RISK),
+      # pull each score column's value from the NEXT row (the END_RISK
+      # marker row) onto the START_RISK row, same trick as END_RISK
+      across(all_of(score_cols), ~ lead(.x), .names = paste0("{.col}_AT_END_RISK_", suffix))
+    ) %>%
+    slice(1) %>%
+    ungroup() %>%
+    select(USERID, START_RISK, END_RISK_final, all_of(score_end_names)) %>%
+    left_join(
+      sum_journey %>% filter(!is.na(SUM_JOURNEY_USE_M)) %>% select(USERID, SUM_JOURNEY_USE_M),
+      by = "USERID"
+    )
+
+  names(out)[names(out) == "END_RISK_final"]   <- paste0("END_RISK_", suffix)
+  names(out)[names(out) == "SUM_JOURNEY_USE_M"] <- paste0("SUM_JOURNEY_USE_M_", suffix)
+
+  out
+}
+
+# ---------------------------------------------------------------------
+# 4. Build the 1-, 3-, and 6-month outcome tables and combine
+#    (12-month outcome pair removed per request)
+# ---------------------------------------------------------------------
+score_cols <- c("STRESSLEVEL", "MANAGEFEELINGSLEVEL", "FEELINGSFREQUENCY",
+                 "DAYSEMOTIONALLYCHALLENGING", "MANAGESTRESSLEVEL")
+
+outcomes_1 <- build_outcome_table(build_end_risk(abc, 1), Monthly_DF, "1", score_cols)
+outcomes_3 <- build_outcome_table(build_end_risk(abc, 3), Monthly_DF, "3", score_cols)
+outcomes_6 <- build_outcome_table(build_end_risk(abc, 6), Monthly_DF, "6", score_cols)
+
+# score values AT the START_RISK timepoint (same physical row regardless
+# of follow-up window, so computed once here rather than per suffix)
+start_scores <- abc %>%
+  filter(START_RISK == 1) %>%
+  distinct(USERID, .keep_all = TRUE) %>%
+  select(USERID, all_of(score_cols)) %>%
+  rename_with(~ paste0(.x, "_AT_START_RISK"), all_of(score_cols))
+
+# ---------------------------------------------------------------------
+# 5. Sums of TOTAL_JOURNEY_USE_M BEFORE START_RISK: 1, 3, and 6 months
+#    prior to the START_RISK date (window is [start_date - N months,
+#    start_date), i.e. up to but not including the START_RISK row
+#    itself).
+# ---------------------------------------------------------------------
+start_dates <- abc %>%
+  filter(START_RISK == 1) %>%
+  distinct(USERID, .keep_all = TRUE) %>%
+  select(USERID, START_RISK_DATE = EVENTDATE)
+
+before_sums <- start_dates %>%
+  left_join(Monthly_DF[, c("USERID", "EVENTDATE", "TOTAL_JOURNEY_USE_M")], by = "USERID") %>%
+  mutate(EVENTDATE = as.Date(EVENTDATE)) %>%
+  group_by(USERID, START_RISK_DATE) %>%
+  summarise(
+    SUM_JOURNEY_USE_M_BEFORE_1 = sum(
+      TOTAL_JOURNEY_USE_M[EVENTDATE >= START_RISK_DATE %m-% months(1) & EVENTDATE < START_RISK_DATE],
+      na.rm = TRUE
+    ),
+    SUM_JOURNEY_USE_M_BEFORE_3 = sum(
+      TOTAL_JOURNEY_USE_M[EVENTDATE >= START_RISK_DATE %m-% months(3) & EVENTDATE < START_RISK_DATE],
+      na.rm = TRUE
+    ),
+    SUM_JOURNEY_USE_M_BEFORE_6 = sum(
+      TOTAL_JOURNEY_USE_M[EVENTDATE >= START_RISK_DATE %m-% months(6) & EVENTDATE < START_RISK_DATE],
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  ) %>%
+  select(-START_RISK_DATE)
+
+# ---------------------------------------------------------------------
+# 6. Combine everything into one wide table
+# ---------------------------------------------------------------------
+six_month_outcomes <- outcomes_1 %>%
+  full_join(outcomes_3 %>% select(-START_RISK), by = "USERID") %>%
+  full_join(outcomes_6 %>% select(-START_RISK), by = "USERID") %>%
+  full_join(before_sums, by = "USERID") %>%
+  full_join(start_scores, by = "USERID") %>%
+  select(USERID, START_RISK,
+         END_RISK_1, SUM_JOURNEY_USE_M_1,
+         END_RISK_3, SUM_JOURNEY_USE_M_3,
+         END_RISK_6, SUM_JOURNEY_USE_M_6,
+         SUM_JOURNEY_USE_M_BEFORE_1, SUM_JOURNEY_USE_M_BEFORE_3, SUM_JOURNEY_USE_M_BEFORE_6,
+         ends_with("_AT_START_RISK"),
+         ends_with("_AT_END_RISK_1"),
+         ends_with("_AT_END_RISK_3"),
+         ends_with("_AT_END_RISK_6"))
+
+# ---------------------------------------------------------------------
+# 7. "INCREASE" flags: YES/NO/NA comparisons of each after-timepoint
+#    value against its corresponding before/start baseline
+#    - JOURNEY_INCREASE_<n>: after (1/3/6 month window sum) vs. before
+#      (same-length window prior to START_RISK)
+#    - <SCORE>_INCREASE_<n>: value AT the END_RISK_<n> marker vs. value
+#      AT the START_RISK row
+# ---------------------------------------------------------------------
+six_month_outcomes <- six_month_outcomes %>%
+  mutate(
+    JOURNEY_INCREASE_1 = case_when(
+      is.na(SUM_JOURNEY_USE_M_1) | is.na(SUM_JOURNEY_USE_M_BEFORE_1) ~ NA_character_,
+      SUM_JOURNEY_USE_M_1 > SUM_JOURNEY_USE_M_BEFORE_1                ~ "YES",
+      TRUE                                                            ~ "NO"
+    ),
+    JOURNEY_INCREASE_3 = case_when(
+      is.na(SUM_JOURNEY_USE_M_3) | is.na(SUM_JOURNEY_USE_M_BEFORE_3) ~ NA_character_,
+      SUM_JOURNEY_USE_M_3 > SUM_JOURNEY_USE_M_BEFORE_3                ~ "YES",
+      TRUE                                                            ~ "NO"
+    ),
+    JOURNEY_INCREASE_6 = case_when(
+      is.na(SUM_JOURNEY_USE_M_6) | is.na(SUM_JOURNEY_USE_M_BEFORE_6) ~ NA_character_,
+      SUM_JOURNEY_USE_M_6 > SUM_JOURNEY_USE_M_BEFORE_6                ~ "YES",
+      TRUE                                                            ~ "NO"
+    ),
+
+    # --- STRESSLEVEL ---
+    STRESSLEVEL_INCREASE_1 = case_when(
+      is.na(STRESSLEVEL_AT_END_RISK_1) | is.na(STRESSLEVEL_AT_START_RISK) ~ NA_character_,
+      STRESSLEVEL_AT_END_RISK_1 > STRESSLEVEL_AT_START_RISK                ~ "YES",
+      TRUE                                                                 ~ "NO"
+    ),
+    STRESSLEVEL_INCREASE_3 = case_when(
+      is.na(STRESSLEVEL_AT_END_RISK_3) | is.na(STRESSLEVEL_AT_START_RISK) ~ NA_character_,
+      STRESSLEVEL_AT_END_RISK_3 > STRESSLEVEL_AT_START_RISK                ~ "YES",
+      TRUE                                                                 ~ "NO"
+    ),
+    STRESSLEVEL_INCREASE_6 = case_when(
+      is.na(STRESSLEVEL_AT_END_RISK_6) | is.na(STRESSLEVEL_AT_START_RISK) ~ NA_character_,
+      STRESSLEVEL_AT_END_RISK_6 > STRESSLEVEL_AT_START_RISK                ~ "YES",
+      TRUE                                                                 ~ "NO"
+    ),
+
+    # --- MANAGEFEELINGSLEVEL ---
+    MANAGEFEELINGSLEVEL_INCREASE_1 = case_when(
+      is.na(MANAGEFEELINGSLEVEL_AT_END_RISK_1) | is.na(MANAGEFEELINGSLEVEL_AT_START_RISK) ~ NA_character_,
+      MANAGEFEELINGSLEVEL_AT_END_RISK_1 > MANAGEFEELINGSLEVEL_AT_START_RISK                ~ "YES",
+      TRUE                                                                                 ~ "NO"
+    ),
+    MANAGEFEELINGSLEVEL_INCREASE_3 = case_when(
+      is.na(MANAGEFEELINGSLEVEL_AT_END_RISK_3) | is.na(MANAGEFEELINGSLEVEL_AT_START_RISK) ~ NA_character_,
+      MANAGEFEELINGSLEVEL_AT_END_RISK_3 > MANAGEFEELINGSLEVEL_AT_START_RISK                ~ "YES",
+      TRUE                                                                                 ~ "NO"
+    ),
+    MANAGEFEELINGSLEVEL_INCREASE_6 = case_when(
+      is.na(MANAGEFEELINGSLEVEL_AT_END_RISK_6) | is.na(MANAGEFEELINGSLEVEL_AT_START_RISK) ~ NA_character_,
+      MANAGEFEELINGSLEVEL_AT_END_RISK_6 > MANAGEFEELINGSLEVEL_AT_START_RISK                ~ "YES",
+      TRUE                                                                                 ~ "NO"
+    ),
+
+    # --- FEELINGSFREQUENCY ---
+    FEELINGSFREQUENCY_INCREASE_1 = case_when(
+      is.na(FEELINGSFREQUENCY_AT_END_RISK_1) | is.na(FEELINGSFREQUENCY_AT_START_RISK) ~ NA_character_,
+      FEELINGSFREQUENCY_AT_END_RISK_1 > FEELINGSFREQUENCY_AT_START_RISK                ~ "YES",
+      TRUE                                                                             ~ "NO"
+    ),
+    FEELINGSFREQUENCY_INCREASE_3 = case_when(
+      is.na(FEELINGSFREQUENCY_AT_END_RISK_3) | is.na(FEELINGSFREQUENCY_AT_START_RISK) ~ NA_character_,
+      FEELINGSFREQUENCY_AT_END_RISK_3 > FEELINGSFREQUENCY_AT_START_RISK                ~ "YES",
+      TRUE                                                                             ~ "NO"
+    ),
+    FEELINGSFREQUENCY_INCREASE_6 = case_when(
+      is.na(FEELINGSFREQUENCY_AT_END_RISK_6) | is.na(FEELINGSFREQUENCY_AT_START_RISK) ~ NA_character_,
+      FEELINGSFREQUENCY_AT_END_RISK_6 > FEELINGSFREQUENCY_AT_START_RISK                ~ "YES",
+      TRUE                                                                             ~ "NO"
+    ),
+
+    # --- DAYSEMOTIONALLYCHALLENGING ---
+    DAYSEMOTIONALLYCHALLENGING_INCREASE_1 = case_when(
+      is.na(DAYSEMOTIONALLYCHALLENGING_AT_END_RISK_1) | is.na(DAYSEMOTIONALLYCHALLENGING_AT_START_RISK) ~ NA_character_,
+      DAYSEMOTIONALLYCHALLENGING_AT_END_RISK_1 > DAYSEMOTIONALLYCHALLENGING_AT_START_RISK                ~ "YES",
+      TRUE                                                                                                ~ "NO"
+    ),
+    DAYSEMOTIONALLYCHALLENGING_INCREASE_3 = case_when(
+      is.na(DAYSEMOTIONALLYCHALLENGING_AT_END_RISK_3) | is.na(DAYSEMOTIONALLYCHALLENGING_AT_START_RISK) ~ NA_character_,
+      DAYSEMOTIONALLYCHALLENGING_AT_END_RISK_3 > DAYSEMOTIONALLYCHALLENGING_AT_START_RISK                ~ "YES",
+      TRUE                                                                                                ~ "NO"
+    ),
+    DAYSEMOTIONALLYCHALLENGING_INCREASE_6 = case_when(
+      is.na(DAYSEMOTIONALLYCHALLENGING_AT_END_RISK_6) | is.na(DAYSEMOTIONALLYCHALLENGING_AT_START_RISK) ~ NA_character_,
+      DAYSEMOTIONALLYCHALLENGING_AT_END_RISK_6 > DAYSEMOTIONALLYCHALLENGING_AT_START_RISK                ~ "YES",
+      TRUE                                                                                                ~ "NO"
+    ),
+
+    # --- MANAGESTRESSLEVEL ---
+    MANAGESTRESSLEVEL_INCREASE_1 = case_when(
+      is.na(MANAGESTRESSLEVEL_AT_END_RISK_1) | is.na(MANAGESTRESSLEVEL_AT_START_RISK) ~ NA_character_,
+      MANAGESTRESSLEVEL_AT_END_RISK_1 > MANAGESTRESSLEVEL_AT_START_RISK                ~ "YES",
+      TRUE                                                                             ~ "NO"
+    ),
+    MANAGESTRESSLEVEL_INCREASE_3 = case_when(
+      is.na(MANAGESTRESSLEVEL_AT_END_RISK_3) | is.na(MANAGESTRESSLEVEL_AT_START_RISK) ~ NA_character_,
+      MANAGESTRESSLEVEL_AT_END_RISK_3 > MANAGESTRESSLEVEL_AT_START_RISK                ~ "YES",
+      TRUE                                                                             ~ "NO"
+    ),
+    MANAGESTRESSLEVEL_INCREASE_6 = case_when(
+      is.na(MANAGESTRESSLEVEL_AT_END_RISK_6) | is.na(MANAGESTRESSLEVEL_AT_START_RISK) ~ NA_character_,
+      MANAGESTRESSLEVEL_AT_END_RISK_6 > MANAGESTRESSLEVEL_AT_START_RISK                ~ "YES",
+      TRUE                                                                             ~ "NO"
+    )
+  )
+
+```
+
+
+``` {r daily_case_counts}
+
+
+
+
+
+
+```
+
+
+
+```{r case_count_analyses}
+
+# every row/column pair to cross-tabulate
+crosstab_pairs <- list(
+  c("JOURNEY_INCREASE_1", "END_RISK_1"),
+  c("JOURNEY_INCREASE_3", "END_RISK_3"),
+  c("JOURNEY_INCREASE_6", "END_RISK_6"),
+  c("JOURNEY_INCREASE_1", "STRESSLEVEL_INCREASE_1"),
+  c("JOURNEY_INCREASE_3", "STRESSLEVEL_INCREASE_3"),
+  c("JOURNEY_INCREASE_6", "STRESSLEVEL_INCREASE_6"),
+  c("JOURNEY_INCREASE_1", "MANAGEFEELINGSLEVEL_INCREASE_1"),
+  c("JOURNEY_INCREASE_3", "MANAGEFEELINGSLEVEL_INCREASE_3"),
+  c("JOURNEY_INCREASE_6", "MANAGEFEELINGSLEVEL_INCREASE_6"),
+  c("JOURNEY_INCREASE_1", "FEELINGSFREQUENCY_INCREASE_1"),
+  c("JOURNEY_INCREASE_3", "FEELINGSFREQUENCY_INCREASE_3"),
+  c("JOURNEY_INCREASE_6", "FEELINGSFREQUENCY_INCREASE_6"),
+  c("JOURNEY_INCREASE_1", "DAYSEMOTIONALLYCHALLENGING_INCREASE_1"),
+  c("JOURNEY_INCREASE_3", "DAYSEMOTIONALLYCHALLENGING_INCREASE_3"),
+  c("JOURNEY_INCREASE_6", "DAYSEMOTIONALLYCHALLENGING_INCREASE_6"),
+  c("JOURNEY_INCREASE_1", "MANAGESTRESSLEVEL_INCREASE_1"),
+  c("JOURNEY_INCREASE_3", "MANAGESTRESSLEVEL_INCREASE_3"),
+  c("JOURNEY_INCREASE_6", "MANAGESTRESSLEVEL_INCREASE_6")
+)
+
+make_crosstab <- function(row_var, col_var, data = six_month_outcomes) {
+  # keep only rows where BOTH variables have a valid (non-missing)
+  # response -- USERIDs with NA on either side are dropped entirely
+  # rather than shown as a "missing" row/column in the table
+  filtered <- data %>%
+    filter(!is.na(.data[[row_var]]), !is.na(.data[[col_var]])) %>%
+    select(all_of(c(row_var, col_var)))
+
+  # tbl_cross() requires at least 1 row -- if no USERID has valid
+  # responses on both variables at once, skip this pair rather than
+  # erroring out
+  if (nrow(filtered) == 0) {
+    message("Skipping ", row_var, " x ", col_var,
+            ": no rows with valid responses on both variables.")
+    return(NULL)
+  }
+
+  filtered %>%
+    tbl_cross(
+      row     = all_of(row_var),
+      col     = all_of(col_var),
+      percent = "cell",     # cell percentages (of the table total)
+      digits  = c(0, 1),    # 0 decimals for N, 1 decimal for %
+      missing = "no"        # safety net: don't add a "missing" row/col
+    ) %>%
+    bold_labels() %>%
+    modify_caption(paste0("**", row_var, " x ", col_var, "**"))
+}
+
+crosstab_names <- sapply(crosstab_pairs, paste, collapse = "_vs_")
+crosstab_list  <- lapply(crosstab_pairs, function(p) make_crosstab(p[1], p[2]))
+names(crosstab_list) <- crosstab_names
+
+# drop any pairs that had no valid overlapping data (see message() output
+# above for which ones, if any, were skipped)
+crosstab_list <- Filter(Negate(is.null), crosstab_list)
+
+# In an R Markdown / Quarto chunk, or at the RStudio console, each table
+# renders as a clean formatted table with a caption, row/column labels,
+# totals, and "N (pct%)" cells, restricted to valid responses only:
+crosstab_list[["JOURNEY_INCREASE_1_vs_END_RISK_1"]]
+
+# to view/render every table in sequence (e.g. in an R Markdown chunk
+# with results='asis'):
+for (tbl in crosstab_list) print(tbl)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ``` {r monthly_out_pred_correlations}
 
@@ -902,22 +1606,6 @@ model1 <- lmer(DAYSEMOTIONALLYCHALLENGING ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC
 
 summary(model1)
 
-```
-
-Monthly_Dep_Anx_GRP_1 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$DEP_ANX_RISK_GROUP == 1),]
-
-Monthly_Dep_Anx_GRP_2 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$DEP_ANX_RISK_GROUP == 2),]
-
-Monthly_Dep_Anx_GRP_3 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$DEP_ANX_RISK_GROUP == 3),]
-
-Monthly_Stress_GRP_1 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$STRESS_RISK_GROUP == 1),]
-
-Monthly_Stress_GRP_2 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$STRESS_RISK_GROUP == 2),]
-
-Monthly_Stress_GRP_3 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$STRESS_RISK_GROUP == 3),]
-
-
-
 
 
 
@@ -932,8 +1620,6 @@ Monthly_Dep_Anx_GRP_3$TOTAL_JOURNEY_USE_M_z <- scale(Monthly_Dep_Anx_GRP_3$TOTAL
 model1 <- lmer(STRESSLEVEL ~ TOTAL_JOURNEY_USE_M_z * DATE_NUMERIC + (1 | USERID), data = Monthly_Dep_Anx_GRP_3)
 
 summary(model1)
-
-```{r sandbox}
 
 write.csv(abc, "C:/Users/Owner/Downloads/test.csv", row.names = F)
 
@@ -1114,191 +1800,6 @@ testmodel <- lmer(
 
 summary(testmodel)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-abc <- Monthly_Risk_Transition
-
-# Make sure EVENTDATE is an actual Date object
-abc$EVENTDATE <- as.Date(abc$EVENTDATE, format = "%Y-%m-%d")
-
-# ---- 2. Build START_RISK and END_RISK ------------------------------------
-abc <- abc %>%
-  group_by(USERID) %>%
-  mutate(
-    # earliest EVENTDATE among rows where PERIOD_RISK == 1 (NA-safe)
-    .start_date = suppressWarnings(
-      min(EVENTDATE[!is.na(PERIOD_RISK) & PERIOD_RISK == 1], na.rm = TRUE)
-    ),
-    # if a USERID has no PERIOD_RISK == 1 rows at all, min() on an empty
-    # vector returns Inf -> convert that to NA so comparisons behave
-    .start_date = as.Date(ifelse(is.infinite(.start_date), NA, .start_date),
-                           origin = "1970-01-01"),
-
-    START_RISK = as.integer(
-      !is.na(PERIOD_RISK) & PERIOD_RISK == 1 &
-        !is.na(.start_date) & EVENTDATE == .start_date
-    ),
-
-    # Is this row within the 5-7 month (inclusive) follow-up window?
-    .in_window = !is.na(.start_date) &
-      EVENTDATE >= (.start_date %m+% months(5)) &
-      EVENTDATE <= (.start_date %m+% months(7)),
-
-    # --- "1" case: earliest EVENTDATE in-window where PERIOD_RISK == 1
-    #     AND MONTHLY == 1 ---
-    .end1_date = suppressWarnings(
-      min(EVENTDATE[.in_window & !is.na(PERIOD_RISK) & PERIOD_RISK == 1 &
-                      !is.na(MONTHLY) & MONTHLY == 1],
-          na.rm = TRUE)
-    ),
-    .end1_date = as.Date(ifelse(is.infinite(.end1_date), NA, .end1_date),
-                          origin = "1970-01-01")
-  ) %>%
-  ungroup()
-
-# --- "0" case, part A: flag which (USERID, PERIOD) groups are "clean"
-#     -- i.e. every row sharing that PERIOD value has PERIOD_RISK == 0.
-#     ASSUMPTION: this is checked only among each USERID's IN-WINDOW rows
-#     (the 5-7 month follow-up window), not that PERIOD's entire history
-#     in the dataset. Requiring the whole historical PERIOD to be 100%
-#     risk-free turned out to be far too strict for this data (almost no
-#     PERIOD ever qualifies, since most periods begin with the very risk
-#     event that starts them) and produced almost no END_RISK == 0 rows
-#     at all. If you actually intended the whole-history version, swap
-#     the .filter(.in_window) below to run on the full abc instead. ---
-period_clean <- abc %>%
-  filter(.in_window) %>%
-  group_by(USERID, PERIOD) %>%
-  summarise(.period_all_zero = all(!is.na(PERIOD_RISK) & PERIOD_RISK == 0),
-            .groups = "drop")
-
-abc <- abc %>%
-  left_join(period_clean, by = c("USERID", "PERIOD"))
-
-# --- "0" case, part B: among a USERID's in-window rows that belong to a
-#     "clean" PERIOD, find the MAXIMUM such PERIOD value ---
-max_clean_period <- abc %>%
-  filter(.in_window, .period_all_zero) %>%
-  group_by(USERID) %>%
-  summarise(.max_period0 = max(PERIOD), .groups = "drop")
-
-abc <- abc %>%
-  left_join(max_clean_period, by = "USERID") %>%
-  group_by(USERID) %>%
-  mutate(
-    # --- "0" case, part C: earliest in-window EVENTDATE within that max
-    #     clean PERIOD, restricted to rows where MONTHLY == 1 ---
-    .end0_date = suppressWarnings(
-      min(EVENTDATE[.in_window & !is.na(.max_period0) & PERIOD == .max_period0 &
-                      !is.na(MONTHLY) & MONTHLY == 1],
-          na.rm = TRUE)
-    ),
-    .end0_date = as.Date(ifelse(is.infinite(.end0_date), NA, .end0_date),
-                          origin = "1970-01-01"),
-
-    # --- If a USERID has BOTH a "1" candidate and a "0" candidate, keep
-    #     only whichever EVENTDATE is closer to exactly 6 months after
-    #     the START_RISK date; the other candidate is dropped (becomes NA
-    #     for that USERID). Ties are broken in favor of the "1" case. ---
-    .six_month_mark = .start_date %m+% months(6),
-    .dist1 = as.numeric(abs(.end1_date - .six_month_mark)),
-    .dist0 = as.numeric(abs(.end0_date - .six_month_mark)),
-    .keep1 = !is.na(.end1_date) & (is.na(.end0_date) | .dist1 <= .dist0),
-    .keep0 = !is.na(.end0_date) & (is.na(.end1_date) | .dist0 <  .dist1),
-
-    END_RISK = case_when(
-      .keep1 & PERIOD_RISK == 1 & !is.na(MONTHLY) & MONTHLY == 1 &
-        EVENTDATE == .end1_date ~ 1L,
-      .keep0 & PERIOD_RISK == 0 & !is.na(MONTHLY) & MONTHLY == 1 &
-        EVENTDATE == .end0_date ~ 0L,
-      TRUE ~ NA_integer_
-    )
-  ) %>%
-  ungroup() %>%
-  select(-.start_date, -.in_window, -.end1_date, -.period_all_zero,
-         -.max_period0, -.end0_date, -.six_month_mark, -.dist1, -.dist0,
-         -.keep1, -.keep0)
-
-abc_risk_subset <- abc %>%
-  group_by(USERID) %>%
-  filter(any(START_RISK == 1, na.rm = TRUE) & any(!is.na(END_RISK), na.rm = TRUE)) %>%
-  ungroup()
-
-abc_risk_subset <- abc_risk_subset %>%
-  arrange(USERID, PERIOD, EVENTDATE) %>%
-  group_by(USERID, PERIOD) %>%
-  slice(1) %>%
-  ungroup()
-
-abc_risk_subset <- abc_risk_subset[which(abc_risk_subset$START_RISK == 1 | !is.na(abc_risk_subset$END_RISK)),]
-
-abc_risk_subset <- abc_risk_subset %>%
-  distinct(USERID, EVENTDATE, .keep_all = TRUE)
-
-Monthly_DF_Outcome_Join <- Monthly_DF[,c("USERID", "EVENTDATE", "TOTAL_JOURNEY_USE_M")]
-
-six_month_risk_outcomes <- abc_risk_subset
-
-six_month_risk_outcomes$EVENTDATE_COPY <- six_month_risk_outcomes$EVENTDATE
-
-six_month_risk_outcomes <- six_month_risk_outcomes[, c("USERID", "EVENTDATE", "EVENTDATE_COPY")]
-
-six_month_risk_outcomes <- merge(six_month_risk_outcomes, Monthly_DF_Outcome_Join, by = c("USERID", "EVENTDATE"), all = TRUE)
-
-
-six_month_risk_outcomes$EVENTDATE      <- as.Date(six_month_risk_outcomes$EVENTDATE,      format = "%Y-%m-%d")
-six_month_risk_outcomes$EVENTDATE_COPY <- as.Date(six_month_risk_outcomes$EVENTDATE_COPY, format = "%Y-%m-%d")
-
-# ---- 2. Build SUM_JOURNEY_USE_M -------------------------------------------
-six_month_risk_outcomes <- six_month_risk_outcomes %>%
-  arrange(USERID, EVENTDATE) %>%   # make sure rows are in date order within USERID
-  group_by(USERID) %>%
-  mutate(
-    .rn = row_number(),
-
-    # position (row number within the USERID group) of the FIRST row
-    # where EVENTDATE_COPY is populated
-    .first_pop = suppressWarnings(min(.rn[!is.na(EVENTDATE_COPY)])),
-    .first_pop = ifelse(is.infinite(.first_pop), NA_integer_, .first_pop),
-
-    # position of the SECOND row where EVENTDATE_COPY is populated
-    # (NA if there is no second populated row for this USERID)
-    .second_pop = {
-      pop_positions <- sort(.rn[!is.na(EVENTDATE_COPY)])
-      if (length(pop_positions) >= 2) pop_positions[2] else NA_integer_
-    },
-
-    # last row to include in the sum: the row right before the second
-    # populated row, or the last row of the USERID's data if there is
-    # no second populated row
-    .end_row = ifelse(!is.na(.second_pop), .second_pop - 1L, max(.rn)),
-
-    SUM_JOURNEY_USE_M = ifelse(
-      !is.na(.first_pop) & .rn == .first_pop,
-      sum(TOTAL_JOURNEY_USE_M[.rn >= .first_pop & .rn <= .end_row],
-          na.rm = TRUE),
-      NA_real_
-    )
-  ) %>%
-  ungroup() %>%
-  select(-.rn, -.first_pop, -.second_pop, -.end_row)
+bbb <- Monthly_Risk_Transition[which(Monthly_Risk_Transition$USERID == 6),]
 
 ```

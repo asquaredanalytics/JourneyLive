@@ -81,17 +81,17 @@ Comp_DF$EVENTDATE <- as.Date(Comp_DF$EVENTDATE)
 
 ```{r include=FALSE}
 
-col_indexes <- c(3:30)
+#col_indexes <- c(3:30)
 
-col_sums <- colSums(Comp_DF[, col_indexes])
+#col_sums <- colSums(Comp_DF[, col_indexes])
 
-col_sums
+#col_sums
 
 ```
 
 ``` {r descriptives_daily_stress}
 
-table(Comp_DF$STRESSLEVEL)
+#table(Comp_DF$STRESSLEVEL)
 
 ```
 
@@ -153,20 +153,6 @@ Comp_DF <- merge(Comp_DF, Comp_DF_Dep_Anx, by = 'USERID', all.x = TRUE)
 #  mutate(mean_stresslevel = mean(STRESSLEVEL, na.rm = TRUE),
 #         STRESS_RISK_GROUP = ntile(mean_stresslevel, 3)) %>%
 #  ungroup()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -237,11 +223,11 @@ for (col in second_cols) {
   Comp_DF <- Comp_DF %>%
     group_by(USERID) %>%
     arrange(USERID, EVENTDATE) %>%
-    mutate(period = cumsum(!is.na(MONTHLY))) %>%
-    group_by(USERID, period) %>%
+    mutate(PERIOD = cumsum(!is.na(MONTHLY))) %>%
+    group_by(USERID, PERIOD) %>%
     mutate(!!sum_col := sum(.data[[col]], na.rm = TRUE)) %>%
     ungroup() %>%
-    select(-period)
+    select(-PERIOD)
 }
 
 ### Event Totals Between Daily Check-in Assessment Types
@@ -252,11 +238,11 @@ for (col in second_cols) {
   Comp_DF <- Comp_DF %>%
     group_by(USERID) %>%
     arrange(USERID, EVENTDATE) %>%
-    mutate(period = cumsum(!is.na(DAILY))) %>%
-    group_by(USERID, period) %>%
+    mutate(PERIOD = cumsum(!is.na(DAILY))) %>%
+    group_by(USERID, PERIOD) %>%
     mutate(!!sum_col := sum(.data[[col]], na.rm = TRUE)) %>%
     ungroup() %>%
-    select(-period)
+    select(-PERIOD)
 }
 
 Comp_DF <- Comp_DF %>%
@@ -277,9 +263,7 @@ Comp_DF$Comp_JOURNEY_USE_D <- rowSums(Comp_DF[grep("DAILY_SUM", names(Comp_DF))]
 
 ### Creating data file for those who start as Not-at-Risk and later transition to At-Risk
 
-Transitioned_Data <- Comp_DF
-
-Transitioned_Data <- Transitioned_Data[, -c(3:30,56:111)]
+Transitioned_Data <- Comp_DF[, -c(3:30,56:111)]
 
 Transitioned_Users <- Transitioned_Data %>%
   arrange(USERID, EVENTDATE) %>%
@@ -298,18 +282,16 @@ Transitioned_Data <- Transitioned_Data %>%
   arrange(USERID, EVENTDATE) %>%
   group_by(USERID) %>%
   mutate(
-    period = cumsum(!is.na(MONTHLY))  # increments every time a MONTHLY checkpoint is hit
+    PERIOD = cumsum(!is.na(MONTHLY))  # increments every time a MONTHLY checkpoint is hit
   ) %>%
   ungroup()
 
 period_use_sums <- Transitioned_Data %>%
-  group_by(USERID, period) %>%
+  group_by(USERID, PERIOD) %>%
   summarise(Comp_JOURNEY_USE_SUM = sum(Comp_JOURNEY_USE_D, na.rm = TRUE), .groups = "drop")
 
-Transitioned_Data <- Transitioned_Data %>%
-  left_join(period_use_sums, by = c("USERID", "period"))
-
-
+Monthly_Risk_Transition <- Transitioned_Data %>%
+  left_join(period_use_sums, by = c("USERID", "PERIOD"))
 
 Monthly_DF <- Comp_DF[which(Comp_DF$MONTHLY == 1), -c(3:30)]  ### Update columns here if needed to remove appropriate vars
 
@@ -952,6 +934,8 @@ summary(model1)
 
 ```{r sandbox}
 
+write.csv(abc, "C:/Users/Owner/Downloads/test.csv", row.names = F)
+
 table(Daily_DF$ANY_RISK)
 
 table(Monthly_DF$ANY_RISK)
@@ -981,8 +965,292 @@ summary(model1)
 
 
 
+Monthly_Risk_Transition_TEST <- Monthly_Risk_Transition %>%
+  arrange(USERID, PERIOD) %>%
+  group_by(USERID) %>%
+  mutate(
+    risk_onset_period = ifelse(any(PERIOD_RISK == 1), PERIOD[which(PERIOD_RISK == 1)[1]], NA),
+    phase = case_when(
+      is.na(risk_onset_period) ~ NA_character_,
+      PERIOD < risk_onset_period ~ "before",
+      PERIOD >= risk_onset_period ~ "after"
+    )
+  ) %>%
+  ungroup()
+
+Monthly_Risk_Transition_TEST$Comp_JOURNEY_USE_SUM_z <- scale(Monthly_Risk_Transition_TEST$Comp_JOURNEY_USE_SUM)[,1]
 
 
 
+testmodel <- lmer(
+  STRESSLEVEL ~ Comp_JOURNEY_USE_SUM_z * phase + (1 | USERID),
+  data = Monthly_Risk_Transition_TEST %>% filter(!is.na(phase)),
+  subset = (DEP_ANX_RISK_GROUP == 1)
+)
+
+summary(testmodel)
+
+testmodel <- lmer(
+  MANAGESTRESSLEVEL ~ Comp_JOURNEY_USE_SUM_z * phase + (1 | USERID),
+  data = Monthly_Risk_Transition_TEST %>% filter(!is.na(phase)),
+  subset = (DEP_ANX_RISK_GROUP == 1)
+)
+
+summary(testmodel)
+
+testmodel <- lmer(
+  MANAGEFEELINGSLEVEL ~ Comp_JOURNEY_USE_SUM_z * phase + (1 | USERID),
+  data = Monthly_Risk_Transition_TEST %>% filter(!is.na(phase)),
+  subset = (DEP_ANX_RISK_GROUP == 1)
+)
+
+summary(testmodel)
+
+
+testmodel <- lmer(
+  FEELINGSFREQUENCY ~ Comp_JOURNEY_USE_SUM_z * phase + (1 | USERID),
+  data = Monthly_Risk_Transition_TEST %>% filter(!is.na(phase)),
+  subset = (DEP_ANX_RISK_GROUP == 1)
+)
+
+summary(testmodel)
+
+
+testmodel <- lmer(
+  DAYSEMOTIONALLYCHALLENGING ~ Comp_JOURNEY_USE_SUM_z * phase + (1 | USERID),
+  data = Monthly_Risk_Transition_TEST %>% filter(!is.na(phase)),
+  subset = (DEP_ANX_RISK_GROUP == 1)
+)
+
+summary(testmodel)
+
+
+
+
+testmodel <- lmer(
+  STRESSLEVEL ~ Comp_JOURNEY_USE_SUM_z * phase + (1 | USERID),
+  data = Monthly_Risk_Transition_TEST %>% filter(!is.na(phase)),
+  subset = (DEP_ANX_RISK_GROUP == 2)
+)
+
+summary(testmodel)
+
+testmodel <- lmer(
+  MANAGESTRESSLEVEL ~ Comp_JOURNEY_USE_SUM_z * phase + (1 | USERID),
+  data = Monthly_Risk_Transition_TEST %>% filter(!is.na(phase)),
+  subset = (DEP_ANX_RISK_GROUP == 2)
+)
+
+summary(testmodel)
+
+testmodel <- lmer(
+  MANAGEFEELINGSLEVEL ~ Comp_JOURNEY_USE_SUM_z * phase + (1 | USERID),
+  data = Monthly_Risk_Transition_TEST %>% filter(!is.na(phase)),
+  subset = (DEP_ANX_RISK_GROUP == 2)
+)
+
+summary(testmodel)
+
+
+testmodel <- lmer(
+  FEELINGSFREQUENCY ~ Comp_JOURNEY_USE_SUM_z * phase + (1 | USERID),
+  data = Monthly_Risk_Transition_TEST %>% filter(!is.na(phase)),
+  subset = (DEP_ANX_RISK_GROUP == 2)
+)
+
+summary(testmodel)
+
+
+testmodel <- lmer(
+  DAYSEMOTIONALLYCHALLENGING ~ Comp_JOURNEY_USE_SUM_z * phase + (1 | USERID),
+  data = Monthly_Risk_Transition_TEST %>% filter(!is.na(phase)),
+  subset = (DEP_ANX_RISK_GROUP == 2)
+)
+
+summary(testmodel)
+
+
+
+testmodel <- lmer(
+  STRESSLEVEL ~ Comp_JOURNEY_USE_SUM_z * phase + (1 | USERID),
+  data = Monthly_Risk_Transition_TEST %>% filter(!is.na(phase)),
+  subset = (DEP_ANX_RISK_GROUP == 3)
+)
+
+summary(testmodel)
+
+testmodel <- lmer(
+  MANAGESTRESSLEVEL ~ Comp_JOURNEY_USE_SUM_z * phase + (1 | USERID),
+  data = Monthly_Risk_Transition_TEST %>% filter(!is.na(phase)),
+  subset = (DEP_ANX_RISK_GROUP == 3)
+)
+
+summary(testmodel)
+
+testmodel <- lmer(
+  MANAGEFEELINGSLEVEL ~ Comp_JOURNEY_USE_SUM_z * phase + (1 | USERID),
+  data = Monthly_Risk_Transition_TEST %>% filter(!is.na(phase)),
+  subset = (DEP_ANX_RISK_GROUP == 3)
+)
+
+summary(testmodel)
+
+
+testmodel <- lmer(
+  FEELINGSFREQUENCY ~ Comp_JOURNEY_USE_SUM_z * phase + (1 | USERID),
+  data = Monthly_Risk_Transition_TEST %>% filter(!is.na(phase)),
+  subset = (DEP_ANX_RISK_GROUP == 3)
+)
+
+summary(testmodel)
+
+
+testmodel <- lmer(
+  DAYSEMOTIONALLYCHALLENGING ~ Comp_JOURNEY_USE_SUM_z * phase + (1 | USERID),
+  data = Monthly_Risk_Transition_TEST %>% filter(!is.na(phase)),
+  subset = (DEP_ANX_RISK_GROUP == 3)
+)
+
+summary(testmodel)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+library(lubridate)
+
+abc <- Monthly_Risk_Transition
+
+# Make sure EVENTDATE is an actual Date object
+abc$EVENTDATE <- as.Date(abc$EVENTDATE, format = "%Y-%m-%d")
+
+# ---- 2. Build START_RISK and END_RISK ------------------------------------
+abc <- abc %>%
+  group_by(USERID) %>%
+  mutate(
+    # earliest EVENTDATE among rows where PERIOD_RISK == 1 (NA-safe)
+    .start_date = suppressWarnings(
+      min(EVENTDATE[!is.na(PERIOD_RISK) & PERIOD_RISK == 1], na.rm = TRUE)
+    ),
+    # if a USERID has no PERIOD_RISK == 1 rows at all, min() on an empty
+    # vector returns Inf -> convert that to NA so comparisons behave
+    .start_date = as.Date(ifelse(is.infinite(.start_date), NA, .start_date),
+                           origin = "1970-01-01"),
+
+    START_RISK = as.integer(
+      !is.na(PERIOD_RISK) & PERIOD_RISK == 1 &
+        !is.na(.start_date) & EVENTDATE == .start_date
+    ),
+
+    # Is this row within the 5-7 month (inclusive) follow-up window?
+    .in_window = !is.na(.start_date) &
+      EVENTDATE >= (.start_date %m+% months(5)) &
+      EVENTDATE <= (.start_date %m+% months(7)),
+
+    # --- "1" case: earliest EVENTDATE in-window where PERIOD_RISK == 1
+    #     AND MONTHLY == 1 ---
+    .end1_date = suppressWarnings(
+      min(EVENTDATE[.in_window & !is.na(PERIOD_RISK) & PERIOD_RISK == 1 &
+                      !is.na(MONTHLY) & MONTHLY == 1],
+          na.rm = TRUE)
+    ),
+    .end1_date = as.Date(ifelse(is.infinite(.end1_date), NA, .end1_date),
+                          origin = "1970-01-01")
+  ) %>%
+  ungroup()
+
+# --- "0" case, part A: flag which (USERID, PERIOD) groups are "clean"
+#     -- i.e. every row sharing that PERIOD value has PERIOD_RISK == 0.
+#     ASSUMPTION: this is checked only among each USERID's IN-WINDOW rows
+#     (the 5-7 month follow-up window), not that PERIOD's entire history
+#     in the dataset. Requiring the whole historical PERIOD to be 100%
+#     risk-free turned out to be far too strict for this data (almost no
+#     PERIOD ever qualifies, since most periods begin with the very risk
+#     event that starts them) and produced almost no END_RISK == 0 rows
+#     at all. If you actually intended the whole-history version, swap
+#     the .filter(.in_window) below to run on the full abc instead. ---
+period_clean <- abc %>%
+  filter(.in_window) %>%
+  group_by(USERID, PERIOD) %>%
+  summarise(.period_all_zero = all(!is.na(PERIOD_RISK) & PERIOD_RISK == 0),
+            .groups = "drop")
+
+abc <- abc %>%
+  left_join(period_clean, by = c("USERID", "PERIOD"))
+
+# --- "0" case, part B: among a USERID's in-window rows that belong to a
+#     "clean" PERIOD, find the MAXIMUM such PERIOD value ---
+max_clean_period <- abc %>%
+  filter(.in_window, .period_all_zero) %>%
+  group_by(USERID) %>%
+  summarise(.max_period0 = max(PERIOD), .groups = "drop")
+
+abc <- abc %>%
+  left_join(max_clean_period, by = "USERID") %>%
+  group_by(USERID) %>%
+  mutate(
+    # --- "0" case, part C: earliest in-window EVENTDATE within that max
+    #     clean PERIOD, restricted to rows where MONTHLY == 1 ---
+    .end0_date = suppressWarnings(
+      min(EVENTDATE[.in_window & !is.na(.max_period0) & PERIOD == .max_period0 &
+                      !is.na(MONTHLY) & MONTHLY == 1],
+          na.rm = TRUE)
+    ),
+    .end0_date = as.Date(ifelse(is.infinite(.end0_date), NA, .end0_date),
+                          origin = "1970-01-01"),
+
+    # --- If a USERID has BOTH a "1" candidate and a "0" candidate, keep
+    #     only whichever EVENTDATE is closer to exactly 6 months after
+    #     the START_RISK date; the other candidate is dropped (becomes NA
+    #     for that USERID). Ties are broken in favor of the "1" case. ---
+    .six_month_mark = .start_date %m+% months(6),
+    .dist1 = as.numeric(abs(.end1_date - .six_month_mark)),
+    .dist0 = as.numeric(abs(.end0_date - .six_month_mark)),
+    .keep1 = !is.na(.end1_date) & (is.na(.end0_date) | .dist1 <= .dist0),
+    .keep0 = !is.na(.end0_date) & (is.na(.end1_date) | .dist0 <  .dist1),
+
+    END_RISK = case_when(
+      .keep1 & PERIOD_RISK == 1 & !is.na(MONTHLY) & MONTHLY == 1 &
+        EVENTDATE == .end1_date ~ 1L,
+      .keep0 & PERIOD_RISK == 0 & !is.na(MONTHLY) & MONTHLY == 1 &
+        EVENTDATE == .end0_date ~ 0L,
+      TRUE ~ NA_integer_
+    )
+  ) %>%
+  ungroup() %>%
+  select(-.start_date, -.in_window, -.end1_date, -.period_all_zero,
+         -.max_period0, -.end0_date, -.six_month_mark, -.dist1, -.dist0,
+         -.keep1, -.keep0)
+
+abc_risk_subset <- abc %>%
+  group_by(USERID) %>%
+  filter(any(START_RISK == 1, na.rm = TRUE) & any(!is.na(END_RISK), na.rm = TRUE)) %>%
+  ungroup()
+
+abc_risk_subset <- abc_risk_subset %>%
+  arrange(USERID, PERIOD, EVENTDATE) %>%
+  group_by(USERID, PERIOD) %>%
+  slice(1) %>%
+  ungroup()
+
+abc123 <- abc_risk_subset[which(abc_risk_subset$USERID == 73833 & abc_risk_subset$EVENTDATE >= '2021-09-01' & abc_risk_subset$EVENTDATE <= '2022-03-18'),]
+
+
+aaa <- Comp_DF[which(Comp_DF$USERID == 73833 & Comp_DF$PERIOD == 1),]
 
 ```

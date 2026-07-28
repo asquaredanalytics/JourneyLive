@@ -907,7 +907,7 @@ daily_cases <- daily_cases %>%
 
 
 # ---- 1. Read in the data, restrict to qualifying USERIDs -----------------
-daily_cases_low_feeling <- Monthly_Risk_Transition
+daily_cases_low_feeling <- Comp_DF
 daily_cases_low_feeling$EVENTDATE <- as.Date(daily_cases_low_feeling$EVENTDATE, format = "%Y-%m-%d")
 
 qualifying_userids <- daily_cases_low_feeling %>%
@@ -1363,12 +1363,12 @@ crosstab_1_low <- daily_cases_low_feeling %>%
     digits  = c(0, 1),   # 0 decimals for N, 1 decimal for %
     missing = "no",      # safety net: don't add a "missing" row/col
     label   = list(      # <-- customize row/col display labels here
-      JOURNEY_INCREASE_1          ~ "Journey Use Increased (1 Month)",
-      MEAN_FEELINGRATING_CHANGE_1 ~ "Feeling Rating Change (1 Month)"
+      JOURNEY_INCREASE_1          ~ "Journey Use Increased?",
+      MEAN_FEELINGRATING_CHANGE_1 ~ "Feeling Rating Change"
     )
   ) %>%
   bold_labels() %>%
-  modify_caption("**Journey Increase vs. Feeling Rating Change -- 1 Month**")  # <-- customize title here
+  modify_caption("**Journey Use and Daily Feeling Change During the Last Month**")  # <-- customize title here
 
 crosstab_1_low
 
@@ -2330,5 +2330,7 @@ testmodel <- lmer(
 summary(testmodel)
 
 bbb <- Monthly_Risk_Transition[which(Monthly_Risk_Transition$USERID == 6),]
+
+table(Daily_Checks$FEELINGRATING)
 
 ```

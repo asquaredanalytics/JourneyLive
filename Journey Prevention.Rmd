@@ -366,244 +366,6 @@ Monthly_Assessments %>%
 
 # Case Counts
 
-```{r case_counts_risk_transition}
-
-abc <- Monthly_Risk_Transition %>%
-  mutate(EVENTDATE = as.Date(EVENTDATE)) %>%
-  group_by(USERID) %>%
-  mutate(
-    .start_date = suppressWarnings(min(EVENTDATE[PERIOD_RISK == 1], na.rm = TRUE)),
-    .start_date = as.Date(ifelse(is.infinite(.start_date), NA, .start_date), origin = "1970-01-01"),
-    START_RISK  = as.integer(!is.na(.start_date) & PERIOD_RISK == 1 & EVENTDATE == .start_date)
-  ) %>%
-  ungroup()
-
-# ---------------------------------------------------------------------
-# 2. build_end_risk(): computes END_RISK for an arbitrary follow-up
-#    window of `target_months` after START_RISK.
-#    ASSUMPTION: window = [target_months - 1, target_months + 1], with
-#    the tie-break at exactly `target_months` -- generalizing the
-#    original 6-month rule (5-7 month window, tie-break at 6).
-# ---------------------------------------------------------------------
-build_end_risk <- function(data, target_months) {
-  data <- data %>%
-    group_by(USERID) %>%
-    mutate(
-      .in_window = !is.na(.start_date) &
-        EVENTDATE >= .start_date %m+% months(target_months - 1) &
-        EVENTDATE <= .start_date %m+% months(target_months + 1),
-
-      .end1_date = suppressWarnings(min(
-        EVENTDATE[.in_window & PERIOD_RISK == 1 & !is.na(MONTHLY) & MONTHLY == 1],
-        na.rm = TRUE
-      )),
-      .end1_date = as.Date(ifelse(is.infinite(.end1_date), NA, .end1_date), origin = "1970-01-01")
-    ) %>%
-    ungroup()
-
-  period_clean <- data %>%
-    filter(.in_window) %>%
-    group_by(USERID, PERIOD) %>%
-    summarise(.period_all_zero = all(!is.na(PERIOD_RISK) & PERIOD_RISK == 0), .groups = "drop")
-
-  data <- data %>% left_join(period_clean, by = c("USERID", "PERIOD"))
-
-  max_clean_period <- data %>%
-    filter(.in_window, .period_all_zero) %>%
-    group_by(USERID) %>%
-    summarise(.max_period0 = max(PERIOD), .groups = "drop")
-
-  data %>%
-    left_join(max_clean_period, by = "USERID") %>%
-    group_by(USERID) %>%
-    mutate(
-      .end0_date = suppressWarnings(min(
-        EVENTDATE[.in_window & !is.na(.max_period0) & PERIOD == .max_period0 &
-                    !is.na(MONTHLY) & MONTHLY == 1],
-        na.rm = TRUE
-      )),
-      .end0_date = as.Date(ifelse(is.infinite(.end0_date), NA, .end0_date), origin = "1970-01-01"),
-
-      # tie-break: keep whichever candidate is closest to `target_months`
-      .target_mark = .start_date %m+% months(target_months),
-      .dist1 = abs(as.numeric(.end1_date - .target_mark)),
-      .dist0 = abs(as.numeric(.end0_date - .target_mark)),
-      .keep1 = !is.na(.end1_date) & (is.na(.end0_date) | .dist1 <= .dist0),
-      .keep0 = !is.na(.end0_date) & (is.na(.end1_date) | .dist0 <  .dist1),
-
-      END_RISK = case_when(
-        .keep1 & PERIOD_RISK == 1 & !is.na(MONTHLY) & MONTHLY == 1 & EVENTDATE == .end1_date ~ 1L,
-        .keep0 & PERIOD_RISK == 0 & !is.na(MONTHLY) & MONTHLY == 1 & EVENTDATE == .end0_date ~ 0L,
-        TRUE ~ NA_integer_
-      )
-    ) %>%
-    ungroup() %>%
-    select(-starts_with("."))
-}
-
-# ---------------------------------------------------------------------
-# 3. build_outcome_table(): from a data frame that already has
-#    START_RISK + END_RISK for one follow-up window, produces one row
-#    per USERID with START_RISK, END_RISK_<suffix>, and
-#    SUM_JOURNEY_USE_M_<suffix>
-# ---------------------------------------------------------------------
-build_outcome_table <- function(data_with_end_risk, monthly_df, suffix) {
-
-  risk_subset <- data_with_end_risk %>%
-    group_by(USERID) %>%
-    filter(any(START_RISK == 1, na.rm = TRUE) & any(!is.na(END_RISK))) %>%
-    ungroup() %>%
-    arrange(USERID, PERIOD, EVENTDATE) %>%
-    group_by(USERID, PERIOD) %>%
-    slice(1) %>%
-    ungroup() %>%
-    filter(START_RISK == 1 | !is.na(END_RISK)) %>%
-    distinct(USERID, EVENTDATE, .keep_all = TRUE)
-
-  sum_journey <- risk_subset %>%
-    transmute(USERID, EVENTDATE, EVENTDATE_COPY = EVENTDATE) %>%
-    full_join(monthly_df[, c("USERID", "EVENTDATE", "TOTAL_JOURNEY_USE_M")],
-              by = c("USERID", "EVENTDATE")) %>%
-    mutate(EVENTDATE = as.Date(EVENTDATE), EVENTDATE_COPY = as.Date(EVENTDATE_COPY)) %>%
-    arrange(USERID, EVENTDATE) %>%
-    group_by(USERID) %>%
-    mutate(
-      .rn         = row_number(),
-      .first_pop  = suppressWarnings(min(.rn[!is.na(EVENTDATE_COPY)])),
-      .first_pop  = ifelse(is.infinite(.first_pop), NA_integer_, .first_pop),
-      .second_pop = {
-        pos <- sort(.rn[!is.na(EVENTDATE_COPY)])
-        if (length(pos) >= 2) pos[2] else NA_integer_
-      },
-      .end_row    = ifelse(!is.na(.second_pop), .second_pop - 1L, max(.rn)),
-      SUM_JOURNEY_USE_M = ifelse(
-        !is.na(.first_pop) & .rn == .first_pop,
-        sum(TOTAL_JOURNEY_USE_M[.rn >= .first_pop & .rn <= .end_row], na.rm = TRUE),
-        NA_real_
-      )
-    ) %>%
-    ungroup() %>%
-    select(-starts_with("."))
-
-  out <- risk_subset %>%
-    mutate(END_RISK_final = lead(END_RISK)) %>%
-    arrange(USERID, EVENTDATE) %>%
-    group_by(USERID) %>%
-    slice(1) %>%
-    ungroup() %>%
-    select(USERID, START_RISK, END_RISK_final) %>%
-    left_join(
-      sum_journey %>% filter(!is.na(SUM_JOURNEY_USE_M)) %>% select(USERID, SUM_JOURNEY_USE_M),
-      by = "USERID"
-    )
-
-  names(out)[names(out) == "END_RISK_final"]   <- paste0("END_RISK_", suffix)
-  names(out)[names(out) == "SUM_JOURNEY_USE_M"] <- paste0("SUM_JOURNEY_USE_M_", suffix)
-
-  out
-}
-
-# ---------------------------------------------------------------------
-# 4. Build the 3-, 6-, and 12-month outcome tables and combine
-# ---------------------------------------------------------------------
-outcomes_3  <- build_outcome_table(build_end_risk(abc, 3),  Monthly_DF, "3")
-outcomes_6  <- build_outcome_table(build_end_risk(abc, 6),  Monthly_DF, "6")
-outcomes_12 <- build_outcome_table(build_end_risk(abc, 12), Monthly_DF, "12")
-
-six_month_outcomes <- outcomes_3 %>%
-  full_join(outcomes_6  %>% select(-START_RISK), by = "USERID") %>%
-  full_join(outcomes_12 %>% select(-START_RISK), by = "USERID") %>%
-  select(USERID, START_RISK,
-         END_RISK_3,  SUM_JOURNEY_USE_M_3,
-         END_RISK_6,  SUM_JOURNEY_USE_M_6,
-         END_RISK_12, SUM_JOURNEY_USE_M_12)
-
-# ---------------------------------------------------------------------
-# 5. Correlations for each follow-up window
-# ---------------------------------------------------------------------
-corr.test(six_month_outcomes$END_RISK_3,  six_month_outcomes$SUM_JOURNEY_USE_M_3,  method = "pearson")
-corr.test(six_month_outcomes$END_RISK_6,  six_month_outcomes$SUM_JOURNEY_USE_M_6,  method = "pearson")
-corr.test(six_month_outcomes$END_RISK_12, six_month_outcomes$SUM_JOURNEY_USE_M_12, method = "pearson")
-
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ``` {r monthly_case_counts}
 
 abc <- Monthly_Risk_Transition %>%
@@ -944,16 +706,506 @@ six_month_outcomes <- six_month_outcomes %>%
 
 ``` {r daily_case_counts}
 
+########################################################################
+# Add BEFORE / AFTER window columns per USERID
+#
+# For each USERID, and for each window length N in {1, 3, 6} months:
+#
+#   BEFORE window = [first EVENTDATE for that USERID,
+#                     first EVENTDATE + N months)
+#     MEAN_FEELINGRATING_BEFORE_<N>      = mean(FEELINGRATING) in that window
+#     SUM_COMP_JOURNEY_USE_D_BEFORE_<N>  = sum(Comp_JOURNEY_USE_D) in that window
+#
+#   AFTER window  = [the EVENTDATE immediately following the LAST
+#                     EVENTDATE included in the BEFORE_<N> window,
+#                     that same start date + N months)
+#     MEAN_FEELINGRATING_AFTER_<N>       = mean(FEELINGRATING) in that window
+#     SUM_COMP_JOURNEY_USE_D_AFTER_<N>   = sum(Comp_JOURNEY_USE_D) in that window
+#
+# NOTE: the "last EVENTDATE in the BEFORE window" (and therefore the
+# start of the AFTER window) is recalculated separately for each window
+# length N, since a longer BEFORE window naturally ends later. So the
+# AFTER_1 / AFTER_3 / AFTER_6 windows each start on a different date.
+#
+# All 12 new columns (mean/sum x before/after x 1/3/6 months) are
+# broadcast onto EVERY row for that USERID (same value repeated across
+# all of that USERID's rows) before being collapsed down to a single
+# row per USERID in the final step below.
+#
+# If a USERID has no EVENTDATE after the BEFORE window closes (i.e. the
+# BEFORE window's last date is also their very last observation), the
+# AFTER columns for that window length are NA.
+########################################################################
 
+# ---- 1. Read in the data -------------------------------------------------
+daily_cases <- Monthly_Risk_Transition
+daily_cases$EVENTDATE <- as.Date(daily_cases$EVENTDATE, format = "%Y-%m-%d")
 
+# ---- 2. Helper: build BEFORE/AFTER mean + sum columns for one window
+#         length (in months), returning one row per USERID with columns
+#         suffixed by that window length -------------------------------
+build_before_after <- function(data, months_n, suffix) {
+  data %>%
+    group_by(USERID) %>%
+    summarise(
+      .baseline_date = min(EVENTDATE, na.rm = TRUE),
+      .before_end    = .baseline_date %m+% months(months_n),
 
+      .before_last_date = suppressWarnings(max(
+        EVENTDATE[EVENTDATE >= .baseline_date & EVENTDATE < .before_end],
+        na.rm = TRUE
+      )),
+      .before_last_date = as.Date(ifelse(is.infinite(.before_last_date), NA, .before_last_date),
+                                   origin = "1970-01-01"),
 
+      MEAN_FEELINGRATING_BEFORE = mean(
+        FEELINGRATING[EVENTDATE >= .baseline_date & EVENTDATE < .before_end],
+        na.rm = TRUE
+      ),
+      SUM_COMP_JOURNEY_USE_D_BEFORE = sum(
+        Comp_JOURNEY_USE_D[EVENTDATE >= .baseline_date & EVENTDATE < .before_end],
+        na.rm = TRUE
+      ),
+
+      # AFTER window starts at the next EVENTDATE strictly after the
+      # last date included in the BEFORE window
+      .after_start = suppressWarnings(min(
+        EVENTDATE[!is.na(.before_last_date) & EVENTDATE > .before_last_date],
+        na.rm = TRUE
+      )),
+      .after_start = as.Date(ifelse(is.infinite(.after_start), NA, .after_start),
+                              origin = "1970-01-01"),
+      .after_end   = .after_start %m+% months(months_n),
+
+      MEAN_FEELINGRATING_AFTER = ifelse(
+        is.na(.after_start), NA_real_,
+        mean(FEELINGRATING[EVENTDATE >= .after_start & EVENTDATE < .after_end], na.rm = TRUE)
+      ),
+      SUM_COMP_JOURNEY_USE_D_AFTER = ifelse(
+        is.na(.after_start), NA_real_,
+        sum(Comp_JOURNEY_USE_D[EVENTDATE >= .after_start & EVENTDATE < .after_end], na.rm = TRUE)
+      ),
+      .groups = "drop"
+    ) %>%
+    select(-starts_with(".")) %>%
+    rename_with(~ paste0(.x, "_", suffix), -USERID)
+}
+
+# ---- 3. Build the 1-, 3-, and 6-month BEFORE/AFTER tables and merge
+#         them back onto every row of the original data ----------------
+windows_1 <- build_before_after(daily_cases, 1, "1")
+windows_3 <- build_before_after(daily_cases, 3, "3")
+windows_6 <- build_before_after(daily_cases, 6, "6")
+
+daily_cases <- daily_cases %>%
+  left_join(windows_1, by = "USERID") %>%
+  left_join(windows_3, by = "USERID") %>%
+  left_join(windows_6, by = "USERID")
+
+# ---------------------------------------------------------------------
+# 4. MEAN_FEELINGRATING change: raw difference (after - before) and a
+#    recoded 3-level version for each window length
+#    MEAN_FEELINGRATING_DIFF_<n>   = MEAN_FEELINGRATING_AFTER_<n> - MEAN_FEELINGRATING_BEFORE_<n>
+#    MEAN_FEELINGRATING_CHANGE_<n> = "SAME"     if |diff| <  0.25
+#                                     "IMPROVED" if  diff  >  0.25
+#                                     "WORSENED" if  diff  <= -0.25
+#    NOTE: as specified, a difference of EXACTLY +0.25 falls into none
+#    of the three buckets (not < 0.25, not > 0.25, not <= -0.25) and is
+#    left as NA below. If you'd rather +0.25 count as "IMPROVED", change
+#    the ">" to ">=" in the IMPROVED condition.
+# ---------------------------------------------------------------------
+daily_cases <- daily_cases %>%
+  mutate(
+    MEAN_FEELINGRATING_DIFF_1 = MEAN_FEELINGRATING_AFTER_1 - MEAN_FEELINGRATING_BEFORE_1,
+    MEAN_FEELINGRATING_DIFF_3 = MEAN_FEELINGRATING_AFTER_3 - MEAN_FEELINGRATING_BEFORE_3,
+    MEAN_FEELINGRATING_DIFF_6 = MEAN_FEELINGRATING_AFTER_6 - MEAN_FEELINGRATING_BEFORE_6,
+
+    MEAN_FEELINGRATING_CHANGE_1 = case_when(
+      is.na(MEAN_FEELINGRATING_DIFF_1)      ~ NA_character_,
+      abs(MEAN_FEELINGRATING_DIFF_1) < 0.25  ~ "SAME",
+      MEAN_FEELINGRATING_DIFF_1 > 0.25       ~ "IMPROVED",
+      MEAN_FEELINGRATING_DIFF_1 <= -0.25     ~ "WORSENED",
+      TRUE                                   ~ NA_character_
+    ),
+    MEAN_FEELINGRATING_CHANGE_3 = case_when(
+      is.na(MEAN_FEELINGRATING_DIFF_3)      ~ NA_character_,
+      abs(MEAN_FEELINGRATING_DIFF_3) < 0.25  ~ "SAME",
+      MEAN_FEELINGRATING_DIFF_3 > 0.25       ~ "IMPROVED",
+      MEAN_FEELINGRATING_DIFF_3 <= -0.25     ~ "WORSENED",
+      TRUE                                   ~ NA_character_
+    ),
+    MEAN_FEELINGRATING_CHANGE_6 = case_when(
+      is.na(MEAN_FEELINGRATING_DIFF_6)      ~ NA_character_,
+      abs(MEAN_FEELINGRATING_DIFF_6) < 0.25  ~ "SAME",
+      MEAN_FEELINGRATING_DIFF_6 > 0.25       ~ "IMPROVED",
+      MEAN_FEELINGRATING_DIFF_6 <= -0.25     ~ "WORSENED",
+      TRUE                                   ~ NA_character_
+    )
+  )
+
+# ---------------------------------------------------------------------
+# 5. JOURNEY_INCREASE flags: does Comp_JOURNEY_USE_D go up from the
+#    BEFORE window to the AFTER window, for each window length?
+#    Mirrors the SUM_JOURNEY_USE_M_<n> / SUM_JOURNEY_USE_M_BEFORE_<n>
+#    pattern, using SUM_COMP_JOURNEY_USE_D_AFTER_<n> /
+#    SUM_COMP_JOURNEY_USE_D_BEFORE_<n> instead.
+# ---------------------------------------------------------------------
+daily_cases <- daily_cases %>%
+  mutate(
+    JOURNEY_INCREASE_1 = case_when(
+      is.na(SUM_COMP_JOURNEY_USE_D_AFTER_1) | is.na(SUM_COMP_JOURNEY_USE_D_BEFORE_1) ~ NA_character_,
+      SUM_COMP_JOURNEY_USE_D_AFTER_1 > SUM_COMP_JOURNEY_USE_D_BEFORE_1                ~ "YES",
+      TRUE                                                                            ~ "NO"
+    ),
+    JOURNEY_INCREASE_3 = case_when(
+      is.na(SUM_COMP_JOURNEY_USE_D_AFTER_3) | is.na(SUM_COMP_JOURNEY_USE_D_BEFORE_3) ~ NA_character_,
+      SUM_COMP_JOURNEY_USE_D_AFTER_3 > SUM_COMP_JOURNEY_USE_D_BEFORE_3                ~ "YES",
+      TRUE                                                                            ~ "NO"
+    ),
+    JOURNEY_INCREASE_6 = case_when(
+      is.na(SUM_COMP_JOURNEY_USE_D_AFTER_6) | is.na(SUM_COMP_JOURNEY_USE_D_BEFORE_6) ~ NA_character_,
+      SUM_COMP_JOURNEY_USE_D_AFTER_6 > SUM_COMP_JOURNEY_USE_D_BEFORE_6                ~ "YES",
+      TRUE                                                                            ~ "NO"
+    )
+  )
+
+daily_cases <- daily_cases %>% 
+  distinct(USERID, .keep_all = TRUE)
 
 ```
 
 
 
-```{r case_count_analyses}
+``` {r daily_case_counts_low_scores}
+
+########################################################################
+# Add BEFORE / AFTER window columns per USERID
+# VARIANT: restricted to USERIDs who have EVER reported a FEELINGRATING
+# of 1 or 2, with the BEFORE windows starting at the FIRST EVENTDATE at
+# which a 1 or 2 value was observed (not simply that USERID's earliest
+# EVENTDATE overall).
+#
+# For each qualifying USERID, and for each window length N in {1,3,6}
+# months:
+#
+#   BASELINE_DATE = first EVENTDATE for that USERID where
+#                    FEELINGRATING %in% c(1, 2)
+#
+#   BEFORE window = [BASELINE_DATE, BASELINE_DATE + N months)
+#     MEAN_FEELINGRATING_BEFORE_<N>      = mean(FEELINGRATING) in that window
+#     SUM_COMP_JOURNEY_USE_D_BEFORE_<N>  = sum(Comp_JOURNEY_USE_D) in that window
+#
+#   AFTER window  = [the EVENTDATE immediately following the LAST
+#                     EVENTDATE included in the BEFORE_<N> window,
+#                     that same start date + N months)
+#     MEAN_FEELINGRATING_AFTER_<N>       = mean(FEELINGRATING) in that window
+#     SUM_COMP_JOURNEY_USE_D_AFTER_<N>   = sum(Comp_JOURNEY_USE_D) in that window
+#
+# USERIDs who never reported a FEELINGRATING of 1 or 2 are dropped
+# entirely before any of the BEFORE/AFTER calculations run.
+########################################################################
+
+
+# ---- 1. Read in the data, restrict to qualifying USERIDs -----------------
+daily_cases_low_feeling <- Monthly_Risk_Transition
+daily_cases_low_feeling$EVENTDATE <- as.Date(daily_cases_low_feeling$EVENTDATE, format = "%Y-%m-%d")
+
+qualifying_userids <- daily_cases_low_feeling %>%
+  filter(!is.na(FEELINGRATING), FEELINGRATING %in% c(1, 2)) %>%
+  distinct(USERID) %>%
+  pull(USERID)
+
+daily_cases_low_feeling <- daily_cases_low_feeling %>%
+  filter(USERID %in% qualifying_userids)
+
+# ---- 2. Baseline date per USERID: first EVENTDATE where FEELINGRATING
+#         is 1 or 2 (this replaces "first EVENTDATE overall" as the
+#         BEFORE-window start) --------------------------------------------
+baseline_dates <- daily_cases_low_feeling %>%
+  filter(!is.na(FEELINGRATING), FEELINGRATING %in% c(1, 2)) %>%
+  group_by(USERID) %>%
+  summarise(BASELINE_DATE = min(EVENTDATE, na.rm = TRUE), .groups = "drop")
+
+# ---- 3. Helper: build BEFORE/AFTER mean + sum columns for one window
+#         length (in months), returning one row per USERID with columns
+#         suffixed by that window length. `baseline_dates` supplies the
+#         per-USERID BEFORE-window start date. -----------------------
+build_before_after <- function(data, baseline_dates, months_n, suffix) {
+  data %>%
+    left_join(baseline_dates, by = "USERID") %>%
+    group_by(USERID) %>%
+    summarise(
+      .before_end = BASELINE_DATE[1] %m+% months(months_n),
+
+      .before_last_date = suppressWarnings(max(
+        EVENTDATE[EVENTDATE >= BASELINE_DATE & EVENTDATE < .before_end],
+        na.rm = TRUE
+      )),
+      .before_last_date = as.Date(ifelse(is.infinite(.before_last_date), NA, .before_last_date),
+                                   origin = "1970-01-01"),
+
+      MEAN_FEELINGRATING_BEFORE = mean(
+        FEELINGRATING[EVENTDATE >= BASELINE_DATE & EVENTDATE < .before_end],
+        na.rm = TRUE
+      ),
+      SUM_COMP_JOURNEY_USE_D_BEFORE = sum(
+        Comp_JOURNEY_USE_D[EVENTDATE >= BASELINE_DATE & EVENTDATE < .before_end],
+        na.rm = TRUE
+      ),
+
+      # AFTER window starts at the next EVENTDATE strictly after the
+      # last date included in the BEFORE window
+      .after_start = suppressWarnings(min(
+        EVENTDATE[!is.na(.before_last_date) & EVENTDATE > .before_last_date],
+        na.rm = TRUE
+      )),
+      .after_start = as.Date(ifelse(is.infinite(.after_start), NA, .after_start),
+                              origin = "1970-01-01"),
+      .after_end   = .after_start %m+% months(months_n),
+
+      MEAN_FEELINGRATING_AFTER = ifelse(
+        is.na(.after_start), NA_real_,
+        mean(FEELINGRATING[EVENTDATE >= .after_start & EVENTDATE < .after_end], na.rm = TRUE)
+      ),
+      SUM_COMP_JOURNEY_USE_D_AFTER = ifelse(
+        is.na(.after_start), NA_real_,
+        sum(Comp_JOURNEY_USE_D[EVENTDATE >= .after_start & EVENTDATE < .after_end], na.rm = TRUE)
+      ),
+      .groups = "drop"
+    ) %>%
+    select(-starts_with(".")) %>%
+    rename_with(~ paste0(.x, "_", suffix), -USERID)
+}
+
+# ---- 4. Build the 1-, 3-, and 6-month BEFORE/AFTER tables and merge
+#         them back onto every row of the (filtered) data ---------------
+windows_1 <- build_before_after(daily_cases_low_feeling, baseline_dates, 1, "1")
+windows_3 <- build_before_after(daily_cases_low_feeling, baseline_dates, 3, "3")
+windows_6 <- build_before_after(daily_cases_low_feeling, baseline_dates, 6, "6")
+
+daily_cases_low_feeling <- daily_cases_low_feeling %>%
+  left_join(windows_1, by = "USERID") %>%
+  left_join(windows_3, by = "USERID") %>%
+  left_join(windows_6, by = "USERID")
+
+# ---------------------------------------------------------------------
+# 5. MEAN_FEELINGRATING change: raw difference (after - before) and a
+#    recoded 3-level version for each window length
+# ---------------------------------------------------------------------
+daily_cases_low_feeling <- daily_cases_low_feeling %>%
+  mutate(
+    MEAN_FEELINGRATING_DIFF_1 = MEAN_FEELINGRATING_AFTER_1 - MEAN_FEELINGRATING_BEFORE_1,
+    MEAN_FEELINGRATING_DIFF_3 = MEAN_FEELINGRATING_AFTER_3 - MEAN_FEELINGRATING_BEFORE_3,
+    MEAN_FEELINGRATING_DIFF_6 = MEAN_FEELINGRATING_AFTER_6 - MEAN_FEELINGRATING_BEFORE_6,
+
+    MEAN_FEELINGRATING_CHANGE_1 = case_when(
+      is.na(MEAN_FEELINGRATING_DIFF_1)      ~ NA_character_,
+      abs(MEAN_FEELINGRATING_DIFF_1) < 0.25  ~ "SAME",
+      MEAN_FEELINGRATING_DIFF_1 > 0.25       ~ "IMPROVED",
+      MEAN_FEELINGRATING_DIFF_1 <= -0.25     ~ "WORSENED",
+      TRUE                                   ~ NA_character_
+    ),
+    MEAN_FEELINGRATING_CHANGE_3 = case_when(
+      is.na(MEAN_FEELINGRATING_DIFF_3)      ~ NA_character_,
+      abs(MEAN_FEELINGRATING_DIFF_3) < 0.25  ~ "SAME",
+      MEAN_FEELINGRATING_DIFF_3 > 0.25       ~ "IMPROVED",
+      MEAN_FEELINGRATING_DIFF_3 <= -0.25     ~ "WORSENED",
+      TRUE                                   ~ NA_character_
+    ),
+    MEAN_FEELINGRATING_CHANGE_6 = case_when(
+      is.na(MEAN_FEELINGRATING_DIFF_6)      ~ NA_character_,
+      abs(MEAN_FEELINGRATING_DIFF_6) < 0.25  ~ "SAME",
+      MEAN_FEELINGRATING_DIFF_6 > 0.25       ~ "IMPROVED",
+      MEAN_FEELINGRATING_DIFF_6 <= -0.25     ~ "WORSENED",
+      TRUE                                   ~ NA_character_
+    )
+  )
+
+# ---------------------------------------------------------------------
+# 6. JOURNEY_INCREASE flags: does Comp_JOURNEY_USE_D go up from the
+#    BEFORE window to the AFTER window, for each window length?
+# ---------------------------------------------------------------------
+daily_cases_low_feeling <- daily_cases_low_feeling %>%
+  mutate(
+    JOURNEY_INCREASE_1 = case_when(
+      is.na(SUM_COMP_JOURNEY_USE_D_AFTER_1) | is.na(SUM_COMP_JOURNEY_USE_D_BEFORE_1) ~ NA_character_,
+      SUM_COMP_JOURNEY_USE_D_AFTER_1 > SUM_COMP_JOURNEY_USE_D_BEFORE_1                ~ "YES",
+      TRUE                                                                            ~ "NO"
+    ),
+    JOURNEY_INCREASE_3 = case_when(
+      is.na(SUM_COMP_JOURNEY_USE_D_AFTER_3) | is.na(SUM_COMP_JOURNEY_USE_D_BEFORE_3) ~ NA_character_,
+      SUM_COMP_JOURNEY_USE_D_AFTER_3 > SUM_COMP_JOURNEY_USE_D_BEFORE_3                ~ "YES",
+      TRUE                                                                            ~ "NO"
+    ),
+    JOURNEY_INCREASE_6 = case_when(
+      is.na(SUM_COMP_JOURNEY_USE_D_AFTER_6) | is.na(SUM_COMP_JOURNEY_USE_D_BEFORE_6) ~ NA_character_,
+      SUM_COMP_JOURNEY_USE_D_AFTER_6 > SUM_COMP_JOURNEY_USE_D_BEFORE_6                ~ "YES",
+      TRUE                                                                            ~ "NO"
+    )
+  )
+
+daily_cases_low_feeling <- daily_cases_low_feeling %>% 
+  distinct(USERID, .keep_all = TRUE)
+
+
+
+```
+
+``` {r daily_case_counts_rolling_min}
+
+daily_cases_rolling_min <- Monthly_Risk_Transition
+
+daily_cases_rolling_min$EVENTDATE <- as.Date(daily_cases_rolling_min$EVENTDATE, format = "%Y-%m-%d")
+
+# ---- 2. Baseline date per USERID: the EVENTDATE that starts the 1-month
+#         window with the LOWEST mean FEELINGRATING for that USERID -------
+baseline_dates <- daily_cases_rolling_min %>%
+  arrange(USERID, EVENTDATE) %>%
+  group_by(USERID) %>%
+  mutate(
+    # rolling 1-month mean FEELINGRATING, using each observed EVENTDATE
+    # as a candidate window start
+    .rolling_mean_1mo = sapply(seq_along(EVENTDATE), function(i) {
+      window_end <- EVENTDATE[i] %m+% months(1)
+      mean(FEELINGRATING[EVENTDATE >= EVENTDATE[i] & EVENTDATE < window_end], na.rm = TRUE)
+    })
+  ) %>%
+  summarise(
+    BASELINE_DATE = {
+      valid <- !is.nan(.rolling_mean_1mo) & !is.na(.rolling_mean_1mo)
+      if (any(valid)) {
+        EVENTDATE[valid][which.min(.rolling_mean_1mo[valid])]
+      } else {
+        as.Date(NA)
+      }
+    },
+    .groups = "drop"
+  )
+
+# ---- 3. Helper: build BEFORE/AFTER mean + sum columns for one window
+#         length (in months), returning one row per USERID with columns
+#         suffixed by that window length. `baseline_dates` supplies the
+#         per-USERID BEFORE-window start date. -----------------------
+build_before_after <- function(data, baseline_dates, months_n, suffix) {
+  data %>%
+    left_join(baseline_dates, by = "USERID") %>%
+    group_by(USERID) %>%
+    summarise(
+      .before_end = BASELINE_DATE[1] %m+% months(months_n),
+
+      .before_last_date = suppressWarnings(max(
+        EVENTDATE[!is.na(BASELINE_DATE) & EVENTDATE >= BASELINE_DATE & EVENTDATE < .before_end],
+        na.rm = TRUE
+      )),
+      .before_last_date = as.Date(ifelse(is.infinite(.before_last_date), NA, .before_last_date),
+                                   origin = "1970-01-01"),
+
+      MEAN_FEELINGRATING_BEFORE = ifelse(
+        is.na(BASELINE_DATE[1]), NA_real_,
+        mean(FEELINGRATING[EVENTDATE >= BASELINE_DATE & EVENTDATE < .before_end], na.rm = TRUE)
+      ),
+      SUM_COMP_JOURNEY_USE_D_BEFORE = ifelse(
+        is.na(BASELINE_DATE[1]), NA_real_,
+        sum(Comp_JOURNEY_USE_D[EVENTDATE >= BASELINE_DATE & EVENTDATE < .before_end], na.rm = TRUE)
+      ),
+
+      # AFTER window starts at the next EVENTDATE strictly after the
+      # last date included in the BEFORE window
+      .after_start = suppressWarnings(min(
+        EVENTDATE[!is.na(.before_last_date) & EVENTDATE > .before_last_date],
+        na.rm = TRUE
+      )),
+      .after_start = as.Date(ifelse(is.infinite(.after_start), NA, .after_start),
+                              origin = "1970-01-01"),
+      .after_end   = .after_start %m+% months(months_n),
+
+      MEAN_FEELINGRATING_AFTER = ifelse(
+        is.na(.after_start), NA_real_,
+        mean(FEELINGRATING[EVENTDATE >= .after_start & EVENTDATE < .after_end], na.rm = TRUE)
+      ),
+      SUM_COMP_JOURNEY_USE_D_AFTER = ifelse(
+        is.na(.after_start), NA_real_,
+        sum(Comp_JOURNEY_USE_D[EVENTDATE >= .after_start & EVENTDATE < .after_end], na.rm = TRUE)
+      ),
+      .groups = "drop"
+    ) %>%
+    select(-starts_with(".")) %>%
+    rename_with(~ paste0(.x, "_", suffix), -USERID)
+}
+
+# ---- 4. Build the 1-, 3-, and 6-month BEFORE/AFTER tables and merge
+#         them back onto every row of the data ---------------------------
+windows_1 <- build_before_after(daily_cases_rolling_min, baseline_dates, 1, "1")
+windows_3 <- build_before_after(daily_cases_rolling_min, baseline_dates, 3, "3")
+windows_6 <- build_before_after(daily_cases_rolling_min, baseline_dates, 6, "6")
+
+daily_cases_rolling_min <- daily_cases_rolling_min %>%
+  left_join(windows_1, by = "USERID") %>%
+  left_join(windows_3, by = "USERID") %>%
+  left_join(windows_6, by = "USERID")
+
+# ---------------------------------------------------------------------
+# 5. MEAN_FEELINGRATING change: raw difference (after - before) and a
+#    recoded 3-level version for each window length
+# ---------------------------------------------------------------------
+daily_cases_rolling_min <- daily_cases_rolling_min %>%
+  mutate(
+    MEAN_FEELINGRATING_DIFF_1 = MEAN_FEELINGRATING_AFTER_1 - MEAN_FEELINGRATING_BEFORE_1,
+    MEAN_FEELINGRATING_DIFF_3 = MEAN_FEELINGRATING_AFTER_3 - MEAN_FEELINGRATING_BEFORE_3,
+    MEAN_FEELINGRATING_DIFF_6 = MEAN_FEELINGRATING_AFTER_6 - MEAN_FEELINGRATING_BEFORE_6,
+
+    MEAN_FEELINGRATING_CHANGE_1 = case_when(
+      is.na(MEAN_FEELINGRATING_DIFF_1)      ~ NA_character_,
+      abs(MEAN_FEELINGRATING_DIFF_1) < 0.25  ~ "SAME",
+      MEAN_FEELINGRATING_DIFF_1 > 0.25       ~ "IMPROVED",
+      MEAN_FEELINGRATING_DIFF_1 <= -0.25     ~ "WORSENED",
+      TRUE                                   ~ NA_character_
+    ),
+    MEAN_FEELINGRATING_CHANGE_3 = case_when(
+      is.na(MEAN_FEELINGRATING_DIFF_3)      ~ NA_character_,
+      abs(MEAN_FEELINGRATING_DIFF_3) < 0.25  ~ "SAME",
+      MEAN_FEELINGRATING_DIFF_3 > 0.25       ~ "IMPROVED",
+      MEAN_FEELINGRATING_DIFF_3 <= -0.25     ~ "WORSENED",
+      TRUE                                   ~ NA_character_
+    ),
+    MEAN_FEELINGRATING_CHANGE_6 = case_when(
+      is.na(MEAN_FEELINGRATING_DIFF_6)      ~ NA_character_,
+      abs(MEAN_FEELINGRATING_DIFF_6) < 0.25  ~ "SAME",
+      MEAN_FEELINGRATING_DIFF_6 > 0.25       ~ "IMPROVED",
+      MEAN_FEELINGRATING_DIFF_6 <= -0.25     ~ "WORSENED",
+      TRUE                                   ~ NA_character_
+    )
+  )
+
+# ---------------------------------------------------------------------
+# 6. JOURNEY_INCREASE flags: does Comp_JOURNEY_USE_D go up from the
+#    BEFORE window to the AFTER window, for each window length?
+# ---------------------------------------------------------------------
+daily_cases_rolling_min <- daily_cases_rolling_min %>%
+  mutate(
+    JOURNEY_INCREASE_1 = case_when(
+      is.na(SUM_COMP_JOURNEY_USE_D_AFTER_1) | is.na(SUM_COMP_JOURNEY_USE_D_BEFORE_1) ~ NA_character_,
+      SUM_COMP_JOURNEY_USE_D_AFTER_1 > SUM_COMP_JOURNEY_USE_D_BEFORE_1                ~ "YES",
+      TRUE                                                                            ~ "NO"
+    ),
+    JOURNEY_INCREASE_3 = case_when(
+      is.na(SUM_COMP_JOURNEY_USE_D_AFTER_3) | is.na(SUM_COMP_JOURNEY_USE_D_BEFORE_3) ~ NA_character_,
+      SUM_COMP_JOURNEY_USE_D_AFTER_3 > SUM_COMP_JOURNEY_USE_D_BEFORE_3                ~ "YES",
+      TRUE                                                                            ~ "NO"
+    ),
+    JOURNEY_INCREASE_6 = case_when(
+      is.na(SUM_COMP_JOURNEY_USE_D_AFTER_6) | is.na(SUM_COMP_JOURNEY_USE_D_BEFORE_6) ~ NA_character_,
+      SUM_COMP_JOURNEY_USE_D_AFTER_6 > SUM_COMP_JOURNEY_USE_D_BEFORE_6                ~ "YES",
+      TRUE                                                                            ~ "NO"
+    )
+  )
+
+daily_cases_rolling_min <- daily_cases_rolling_min %>% 
+  distinct(USERID, .keep_all = TRUE)
+
+```
+
+```{r case_count_analyses_monthly}
 
 # every row/column pair to cross-tabulate
 crosstab_pairs <- list(
@@ -998,7 +1250,7 @@ make_crosstab <- function(row_var, col_var, data = six_month_outcomes) {
     tbl_cross(
       row     = all_of(row_var),
       col     = all_of(col_var),
-      percent = "cell",     # cell percentages (of the table total)
+      percent = "row",     # cell percentages (of the table total)
       digits  = c(0, 1),    # 0 decimals for N, 1 decimal for %
       missing = "no"        # safety net: don't add a "missing" row/col
     ) %>%
@@ -1023,29 +1275,306 @@ crosstab_list[["JOURNEY_INCREASE_1_vs_END_RISK_1"]]
 # with results='asis'):
 for (tbl in crosstab_list) print(tbl)
 
+```
 
+```{r case_count_analyses_daily}
 
+# ---------------------------------------------------------------------
+# Crosstab: JOURNEY_INCREASE_1 x MEAN_FEELINGRATING_CHANGE_1
+# ---------------------------------------------------------------------
+crosstab_1 <- daily_cases %>%
+  filter(!is.na(JOURNEY_INCREASE_1), !is.na(MEAN_FEELINGRATING_CHANGE_1)) %>%
+  select(JOURNEY_INCREASE_1, MEAN_FEELINGRATING_CHANGE_1) %>%
+  tbl_cross(
+    row     = JOURNEY_INCREASE_1,
+    col     = MEAN_FEELINGRATING_CHANGE_1,
+    percent = "row",     # cell percentages (of the table total)
+    digits  = c(0, 1),   # 0 decimals for N, 1 decimal for %
+    missing = "no",      # safety net: don't add a "missing" row/col
+    label   = list(      # <-- customize row/col display labels here
+      JOURNEY_INCREASE_1          ~ "Journey Use Increased?",
+      MEAN_FEELINGRATING_CHANGE_1 ~ "Feeling Rating"
+    )
+  ) %>%
+  bold_labels() %>%
+  modify_caption("**Did Journey Use and Average Feeling Ratings Change Over the Last Month?**")  # <-- customize title here
 
+crosstab_1
 
+# ---------------------------------------------------------------------
+# Crosstab: JOURNEY_INCREASE_3 x MEAN_FEELINGRATING_CHANGE_3
+# ---------------------------------------------------------------------
+crosstab_3 <- daily_cases %>%
+  filter(!is.na(JOURNEY_INCREASE_3), !is.na(MEAN_FEELINGRATING_CHANGE_3)) %>%
+  select(JOURNEY_INCREASE_3, MEAN_FEELINGRATING_CHANGE_3) %>%
+  tbl_cross(
+    row     = JOURNEY_INCREASE_3,
+    col     = MEAN_FEELINGRATING_CHANGE_3,
+    percent = "row",
+    digits  = c(0, 1),
+    missing = "no",
+    label   = list(      # <-- customize row/col display labels here
+      JOURNEY_INCREASE_3          ~ "Journey Use Increased?",
+      MEAN_FEELINGRATING_CHANGE_3 ~ "Feeling Rating"
+    )
+  ) %>%
+  bold_labels() %>%
+  modify_caption("**Did Journey Use and Average Feeling Ratings Change Over the Last 3 Months?**")  # <-- customize title here
 
+crosstab_3
 
+# ---------------------------------------------------------------------
+# Crosstab: JOURNEY_INCREASE_6 x MEAN_FEELINGRATING_CHANGE_6
+# ---------------------------------------------------------------------
+crosstab_6 <- daily_cases %>%
+  filter(!is.na(JOURNEY_INCREASE_6), !is.na(MEAN_FEELINGRATING_CHANGE_6)) %>%
+  select(JOURNEY_INCREASE_6, MEAN_FEELINGRATING_CHANGE_6) %>%
+  tbl_cross(
+    row     = JOURNEY_INCREASE_6,
+    col     = MEAN_FEELINGRATING_CHANGE_6,
+    percent = "row",
+    digits  = c(0, 1),
+    missing = "no",
+    label   = list(      # <-- customize row/col display labels here
+      JOURNEY_INCREASE_6          ~ "Journey Use Increased?",
+      MEAN_FEELINGRATING_CHANGE_6 ~ "Feeling Rating"
+    )
+  ) %>%
+  bold_labels() %>%
+  modify_caption("**Did Journey Use and Average Feeling Ratings Change Over the Last 6 Months?**")  # <-- customize title here
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+crosstab_6
 
 ```
+
+
+```{r case_count_analyses_daily_low}
+
+# ---------------------------------------------------------------------
+# Crosstab: JOURNEY_INCREASE_1 x MEAN_FEELINGRATING_CHANGE_1
+# ---------------------------------------------------------------------
+crosstab_1_low <- daily_cases_low_feeling %>%
+  filter(!is.na(JOURNEY_INCREASE_1), !is.na(MEAN_FEELINGRATING_CHANGE_1)) %>%
+  select(JOURNEY_INCREASE_1, MEAN_FEELINGRATING_CHANGE_1) %>%
+  tbl_cross(
+    row     = JOURNEY_INCREASE_1,
+    col     = MEAN_FEELINGRATING_CHANGE_1,
+    percent = "row",     # cell percentages (of the table total)
+    digits  = c(0, 1),   # 0 decimals for N, 1 decimal for %
+    missing = "no",      # safety net: don't add a "missing" row/col
+    label   = list(      # <-- customize row/col display labels here
+      JOURNEY_INCREASE_1          ~ "Journey Use Increased (1 Month)",
+      MEAN_FEELINGRATING_CHANGE_1 ~ "Feeling Rating Change (1 Month)"
+    )
+  ) %>%
+  bold_labels() %>%
+  modify_caption("**Journey Increase vs. Feeling Rating Change -- 1 Month**")  # <-- customize title here
+
+crosstab_1_low
+
+# ---------------------------------------------------------------------
+# Crosstab: JOURNEY_INCREASE_3 x MEAN_FEELINGRATING_CHANGE_3
+# ---------------------------------------------------------------------
+crosstab_3_low <- daily_cases_low_feeling %>%
+  filter(!is.na(JOURNEY_INCREASE_3), !is.na(MEAN_FEELINGRATING_CHANGE_3)) %>%
+  select(JOURNEY_INCREASE_3, MEAN_FEELINGRATING_CHANGE_3) %>%
+  tbl_cross(
+    row     = JOURNEY_INCREASE_3,
+    col     = MEAN_FEELINGRATING_CHANGE_3,
+    percent = "row",
+    digits  = c(0, 1),
+    missing = "no",
+    label   = list(      # <-- customize row/col display labels here
+      JOURNEY_INCREASE_3          ~ "Journey Use Increased (3 Months)",
+      MEAN_FEELINGRATING_CHANGE_3 ~ "Feeling Rating Change (3 Months)"
+    )
+  ) %>%
+  bold_labels() %>%
+  modify_caption("**Journey Increase vs. Feeling Rating Change -- 3 Months**")  # <-- customize title here
+
+crosstab_3_low
+
+# ---------------------------------------------------------------------
+# Crosstab: JOURNEY_INCREASE_6 x MEAN_FEELINGRATING_CHANGE_6
+# ---------------------------------------------------------------------
+crosstab_6_low <- daily_cases_low_feeling %>%
+  filter(!is.na(JOURNEY_INCREASE_6), !is.na(MEAN_FEELINGRATING_CHANGE_6)) %>%
+  select(JOURNEY_INCREASE_6, MEAN_FEELINGRATING_CHANGE_6) %>%
+  tbl_cross(
+    row     = JOURNEY_INCREASE_6,
+    col     = MEAN_FEELINGRATING_CHANGE_6,
+    percent = "row",
+    digits  = c(0, 1),
+    missing = "no",
+    label   = list(      # <-- customize row/col display labels here
+      JOURNEY_INCREASE_6          ~ "Journey Use Increased (6 Months)",
+      MEAN_FEELINGRATING_CHANGE_6 ~ "Feeling Rating Change (6 Months)"
+    )
+  ) %>%
+  bold_labels() %>%
+  modify_caption("**Journey Increase vs. Feeling Rating Change -- 6 Months**")  # <-- customize title here
+
+crosstab_6_low
+
+```
+
+```{r case_count_analyses_rolling_min}
+
+# ---------------------------------------------------------------------
+# Crosstab: JOURNEY_INCREASE_1 x MEAN_FEELINGRATING_CHANGE_1
+# ---------------------------------------------------------------------
+crosstab_1_rolling_min <- daily_cases_rolling_min %>%
+  filter(!is.na(JOURNEY_INCREASE_1), !is.na(MEAN_FEELINGRATING_CHANGE_1)) %>%
+  select(JOURNEY_INCREASE_1, MEAN_FEELINGRATING_CHANGE_1) %>%
+  tbl_cross(
+    row     = JOURNEY_INCREASE_1,
+    col     = MEAN_FEELINGRATING_CHANGE_1,
+    percent = "row",     # cell percentages (of the table total)
+    digits  = c(0, 1),   # 0 decimals for N, 1 decimal for %
+    missing = "no",      # safety net: don't add a "missing" row/col
+    label   = list(      # <-- customize row/col display labels here
+      JOURNEY_INCREASE_1          ~ "Journey Use Increased (1 Month)",
+      MEAN_FEELINGRATING_CHANGE_1 ~ "Feeling Rating Change (1 Month)"
+    )
+  ) %>%
+  bold_labels() %>%
+  modify_caption("**Journey Increase vs. Feeling Rating Change -- 1 Month**")  # <-- customize title here
+
+crosstab_1_rolling_min
+
+# ---------------------------------------------------------------------
+# Crosstab: JOURNEY_INCREASE_3 x MEAN_FEELINGRATING_CHANGE_3
+# ---------------------------------------------------------------------
+crosstab_3_rolling_min <- daily_cases_rolling_min %>%
+  filter(!is.na(JOURNEY_INCREASE_3), !is.na(MEAN_FEELINGRATING_CHANGE_3)) %>%
+  select(JOURNEY_INCREASE_3, MEAN_FEELINGRATING_CHANGE_3) %>%
+  tbl_cross(
+    row     = JOURNEY_INCREASE_3,
+    col     = MEAN_FEELINGRATING_CHANGE_3,
+    percent = "row",
+    digits  = c(0, 1),
+    missing = "no",
+    label   = list(      # <-- customize row/col display labels here
+      JOURNEY_INCREASE_3          ~ "Journey Use Increased (3 Months)",
+      MEAN_FEELINGRATING_CHANGE_3 ~ "Feeling Rating Change (3 Months)"
+    )
+  ) %>%
+  bold_labels() %>%
+  modify_caption("**Journey Increase vs. Feeling Rating Change -- 3 Months**")  # <-- customize title here
+
+crosstab_3_rolling_min
+
+# ---------------------------------------------------------------------
+# Crosstab: JOURNEY_INCREASE_6 x MEAN_FEELINGRATING_CHANGE_6
+# ---------------------------------------------------------------------
+crosstab_6_rolling_min <- daily_cases_rolling_min %>%
+  filter(!is.na(JOURNEY_INCREASE_6), !is.na(MEAN_FEELINGRATING_CHANGE_6)) %>%
+  select(JOURNEY_INCREASE_6, MEAN_FEELINGRATING_CHANGE_6) %>%
+  tbl_cross(
+    row     = JOURNEY_INCREASE_6,
+    col     = MEAN_FEELINGRATING_CHANGE_6,
+    percent = "row",
+    digits  = c(0, 1),
+    missing = "no",
+    label   = list(      # <-- customize row/col display labels here
+      JOURNEY_INCREASE_6          ~ "Journey Use Increased (6 Months)",
+      MEAN_FEELINGRATING_CHANGE_6 ~ "Feeling Rating Change (6 Months)"
+    )
+  ) %>%
+  bold_labels() %>%
+  modify_caption("**Journey Increase vs. Feeling Rating Change -- 6 Months**")  # <-- customize title here
+
+crosstab_6_rolling_min
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

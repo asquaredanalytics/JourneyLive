@@ -28,6 +28,8 @@ library(tvem)
 library(tidyverse)
 library(lubridate)
 library(gtsummary)
+library(gt)
+library(webshot2)
 
 Daily_Checks <- read.csv("G:/My Drive/Inzights/Journey/July 2026 Longitudinal/Daily Checkins.csv")
 
@@ -700,6 +702,7 @@ six_month_outcomes <- six_month_outcomes %>%
 
 ```
 
+# Daily Case Counts
 
 ``` {r daily_case_counts}
 
@@ -871,7 +874,7 @@ daily_cases <- daily_cases %>%
 
 ```
 
-
+# Daily Case Counts - Low Scores
 
 ``` {r daily_case_counts_low_scores}
 
@@ -1047,6 +1050,8 @@ daily_cases_low_feeling <- daily_cases_low_feeling %>%
 
 
 ```
+
+# Daily Case Counts - Rolling Min
 
 ``` {r daily_case_counts_rolling_min}
 
@@ -1350,6 +1355,8 @@ crosstab_6
 # ---------------------------------------------------------------------
 # Crosstab: JOURNEY_INCREASE_1 x MEAN_FEELINGRATING_CHANGE_1
 # ---------------------------------------------------------------------
+
+
 crosstab_1_low <- daily_cases_low_feeling %>%
   filter(!is.na(JOURNEY_INCREASE_1), !is.na(MEAN_FEELINGRATING_CHANGE_1)) %>%
   select(JOURNEY_INCREASE_1, MEAN_FEELINGRATING_CHANGE_1) %>%
@@ -1361,13 +1368,23 @@ crosstab_1_low <- daily_cases_low_feeling %>%
     missing = "no",      # safety net: don't add a "missing" row/col
     label   = list(      # <-- customize row/col display labels here
       JOURNEY_INCREASE_1          ~ "Journey Use Increased?",
-      MEAN_FEELINGRATING_CHANGE_1 ~ "Feeling Rating Change"
+      MEAN_FEELINGRATING_CHANGE_1 ~ "Mood Change"
     )
   ) %>%
   bold_labels() %>%
-  modify_caption("**Journey Use and Daily Feeling Change During the Last Month**")  # <-- customize title here
+  modify_caption("**Journey Increase vs. Mood Change -- 1 Month Low**")  # <-- customize title here
 
 crosstab_1_low
+
+crosstab_1_low %>%
+  as_gt() %>%                      # convert gtsummary object to a gt table
+  gt::gtsave(
+    filename = "crosstab_1_low.png",
+    path     = "C:/Users/Owner/Downloads", # optional, omit to save in working directory
+    vwidth   = 1400,               # virtual browser width in px — bump up for higher res
+    vheight  = 1000,               # virtual browser height in px
+    zoom     = 3                   # scales output resolution (try 2–4)
+  )
 
 # ---------------------------------------------------------------------
 # Crosstab: JOURNEY_INCREASE_3 x MEAN_FEELINGRATING_CHANGE_3
@@ -1387,7 +1404,7 @@ crosstab_3_low <- daily_cases_low_feeling %>%
     )
   ) %>%
   bold_labels() %>%
-  modify_caption("**Journey Increase vs. Feeling Rating Change -- 3 Months**")  # <-- customize title here
+  modify_caption("**Journey Increase vs. Mood Change -- 3 Months Low**")  # <-- customize title here
 
 crosstab_3_low
 
@@ -1409,7 +1426,7 @@ crosstab_6_low <- daily_cases_low_feeling %>%
     )
   ) %>%
   bold_labels() %>%
-  modify_caption("**Journey Increase vs. Feeling Rating Change -- 6 Months**")  # <-- customize title here
+  modify_caption("**Journey Increase vs. Mood Change -- 6 Months Low**")  # <-- customize title here
 
 crosstab_6_low
 
@@ -1435,7 +1452,7 @@ crosstab_1_rolling_min <- daily_cases_rolling_min %>%
     )
   ) %>%
   bold_labels() %>%
-  modify_caption("**Journey Increase vs. Feeling Rating Change -- 1 Month**")  # <-- customize title here
+  modify_caption("**Journey Increase vs. Mood Change -- 1 Month Rolling Minimum**")  # <-- customize title here
 
 crosstab_1_rolling_min
 
@@ -1457,7 +1474,7 @@ crosstab_3_rolling_min <- daily_cases_rolling_min %>%
     )
   ) %>%
   bold_labels() %>%
-  modify_caption("**Journey Increase vs. Feeling Rating Change -- 3 Months**")  # <-- customize title here
+  modify_caption("**Journey Increase vs. Mood Change -- 3 Months Rolling Minimum**")  # <-- customize title here
 
 crosstab_3_rolling_min
 
@@ -1479,7 +1496,7 @@ crosstab_6_rolling_min <- daily_cases_rolling_min %>%
     )
   ) %>%
   bold_labels() %>%
-  modify_caption("**Journey Increase vs. Feeling Rating Change -- 6 Months**")  # <-- customize title here
+  modify_caption("**Journey Increase vs. Mood Change -- 6 Months Rolling Minimum**")  # <-- customize title here
 
 crosstab_6_rolling_min
 

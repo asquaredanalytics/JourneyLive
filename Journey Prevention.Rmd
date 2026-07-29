@@ -738,7 +738,7 @@ six_month_outcomes <- six_month_outcomes %>%
 ########################################################################
 
 # ---- 1. Read in the data -------------------------------------------------
-daily_cases <- Monthly_Risk_Transition
+daily_cases <- Comp_DF
 daily_cases$EVENTDATE <- as.Date(daily_cases$EVENTDATE, format = "%Y-%m-%d")
 
 # ---- 2. Helper: build BEFORE/AFTER mean + sum columns for one window
@@ -1055,7 +1055,7 @@ daily_cases_low_feeling <- daily_cases_low_feeling %>%
 
 ``` {r daily_case_counts_rolling_min}
 
-daily_cases_rolling_min <- Monthly_Risk_Transition
+daily_cases_rolling_min <- Comp_DF
 
 daily_cases_rolling_min$EVENTDATE <- as.Date(daily_cases_rolling_min$EVENTDATE, format = "%Y-%m-%d")
 

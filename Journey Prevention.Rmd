@@ -29,19 +29,19 @@ library(tidyverse)
 library(lubridate)
 library(gtsummary)
 
-Daily_Checks <- read.csv("C:/Users/Owner/Downloads/Daily Checkins.csv")
+Daily_Checks <- read.csv("G:/My Drive/Inzights/Journey/July 2026 Longitudinal/Daily Checkins.csv")
 
 Daily_Checks$DAILY <- 1
 
 colnames(Daily_Checks)[colnames(Daily_Checks) == "CHECKINDATE"] <- "EVENTDATE"
 
-Monthly_Assessments <- read.csv("C:/Users/Owner/Downloads/Monthly Assessments.csv")
+Monthly_Assessments <- read.csv("G:/My Drive/Inzights/Journey/July 2026 Longitudinal/Monthly Assessments.csv")
 
 Monthly_Assessments$MONTHLY <- 1
 
 colnames(Monthly_Assessments)[colnames(Monthly_Assessments) == "ASSESSMENTDATE"] <- "EVENTDATE"
 
-Platform_Events <- read.csv("C:/Users/Owner/Downloads/Platform Events.csv")
+Platform_Events <- read.csv("G:/My Drive/Inzights/Journey/July 2026 Longitudinal/Platform Events.csv")
 
 #Comprehensive_DF <- merge(Monthly_Assessments, Platform_Events, by = c('USERID', 'EVENTDATE'), all.x = TRUE)
 
@@ -71,9 +71,6 @@ Comp_DF <- merge(Comp_DF, Monthly_Assessments, by = c('USERID', 'EVENTDATE'), al
 Comp_DF <- Comp_DF[,-c(35,36,39)]
 
 Comp_DF$EVENTDATE <- as.Date(Comp_DF$EVENTDATE)
-
-test1 <- Monthly_Risk_Transition[1:1000,]
-#write.csv(test1, "C:/Users/Owner/Downloads/TEST1.csv", row.names = FALSE)
 
 ```
 

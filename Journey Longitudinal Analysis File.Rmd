@@ -42,9 +42,8 @@ six_month_outcomes <- read.csv("G:/My Drive/Inzights/Journey/July 2026 Longitudi
 
 ```
 
-```{r case_count_analyses_monthly}
+```{r case_count_analyses_monthly, results='asis'}
 
-# every row/column pair to cross-tabulate
 crosstab_pairs <- list(
   c("JOURNEY_INCREASE_1", "END_RISK_1"),
   c("JOURNEY_INCREASE_3", "END_RISK_3"),
@@ -67,29 +66,21 @@ crosstab_pairs <- list(
 )
 
 make_crosstab <- function(row_var, col_var, data = six_month_outcomes) {
-  # keep only rows where BOTH variables have a valid (non-missing)
-  # response -- USERIDs with NA on either side are dropped entirely
-  # rather than shown as a "missing" row/column in the table
   filtered <- data %>%
     filter(!is.na(.data[[row_var]]), !is.na(.data[[col_var]])) %>%
     select(all_of(c(row_var, col_var)))
 
-  # tbl_cross() requires at least 1 row -- if no USERID has valid
-  # responses on both variables at once, skip this pair rather than
-  # erroring out
   if (nrow(filtered) == 0) {
-    message("Skipping ", row_var, " x ", col_var,
-            ": no rows with valid responses on both variables.")
-    return(NULL)
+    return(NULL)  # dropped the message() call — see note below
   }
 
   filtered %>%
     tbl_cross(
       row     = all_of(row_var),
       col     = all_of(col_var),
-      percent = "row",     # cell percentages (of the table total)
-      digits  = c(0, 1),    # 0 decimals for N, 1 decimal for %
-      missing = "no"        # safety net: don't add a "missing" row/col
+      percent = "row",
+      digits  = c(0, 1),
+      missing = "no"
     ) %>%
     bold_labels() %>%
     modify_caption(paste0("**", row_var, " x ", col_var, "**"))
@@ -98,25 +89,12 @@ make_crosstab <- function(row_var, col_var, data = six_month_outcomes) {
 crosstab_names <- sapply(crosstab_pairs, paste, collapse = "_vs_")
 crosstab_list  <- lapply(crosstab_pairs, function(p) make_crosstab(p[1], p[2]))
 names(crosstab_list) <- crosstab_names
-
-# drop any pairs that had no valid overlapping data (see message() output
-# above for which ones, if any, were skipped)
 crosstab_list <- Filter(Negate(is.null), crosstab_list)
 
-# In an R Markdown / Quarto chunk, or at the RStudio console, each table
-# renders as a clean formatted table with a caption, row/column labels,
-# totals, and "N (pct%)" cells, restricted to valid responses only:
-crosstab_list[["JOURNEY_INCREASE_1_vs_END_RISK_1"]]
-
-# to view/render every table in sequence (e.g. in an R Markdown chunk
-# with results='asis'):
-for (tbl in crosstab_list){
-  
+for (tbl in crosstab_list) {
   print(tbl)
-  
+  cat("\n\n")  # forces a clean break between tables in HTML output
 }
-
-
 
 ```
 

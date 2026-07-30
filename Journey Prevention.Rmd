@@ -102,15 +102,9 @@ Comp_DF$EVENTDATE <- as.Date(Comp_DF$EVENTDATE)
 
 Comp_DF$BAD_DAY_RISK <- ifelse(Comp_DF$FEELINGRATING == 1, 1, 0)
 
-#Comp_DF$BAD_DAY_RISK <- ifelse(is.na(Comp_DF$BAD_DAY_RISK), 0, Comp_DF$BAD_DAY_RISK)
-
 Comp_DF$STRESS_RISK <- ifelse(Comp_DF$STRESSLEVEL > 5, 1, 0)
 
-#Comp_DF$BAD_DAY_RISK <- ifelse(is.na(Comp_DF$BAD_DAY_RISK), 0, Comp_DF$BAD_DAY_RISK)
-
 Comp_DF$DEP_ANX_RISK <- ifelse(Comp_DF$FEELINGSFREQUENCY > 3, 1, 0)
-
-#Comp_DF$BAD_DAY_RISK <- ifelse(is.na(Comp_DF$BAD_DAY_RISK), 0, Comp_DF$BAD_DAY_RISK)
 
 ### Bucket into	moderate, elevated, high-risk
 ###	Review distribution of daily stress scores > 5 to define
@@ -155,9 +149,6 @@ Comp_DF <- merge(Comp_DF, Comp_DF_Dep_Anx, by = 'USERID', all.x = TRUE)
 #  mutate(mean_stresslevel = mean(STRESSLEVEL, na.rm = TRUE),
 #         STRESS_RISK_GROUP = ntile(mean_stresslevel, 3)) %>%
 #  ungroup()
-
-
-
 
 Comp_DF$CHALLENGING_DAYS_RISK <- ifelse(Comp_DF$DAYSEMOTIONALLYCHALLENGING > 0, 1, 0)
 
@@ -208,35 +199,12 @@ Comp_DF$PERIOD_RISK <- ifelse(is.na(Comp_DF$PERIOD_RISK), 0, Comp_DF$PERIOD_RISK
 
 second_cols <- names(Comp_DF)[3:30] 
 
-### Event Totals Between Monthly Assessment Types
-
-for (col in second_cols) {
-  sum_col <- paste0(col, "_MONTHLY_SUM")
-  
-  Comp_DF <- Comp_DF %>%
-    group_by(USERID) %>%
-    arrange(USERID, EVENTDATE) %>%
-    mutate(PERIOD = cumsum(!is.na(MONTHLY))) %>%
-    group_by(USERID, PERIOD) %>%
-    mutate(!!sum_col := sum(.data[[col]], na.rm = TRUE)) %>%
-    ungroup() %>%
-    select(-PERIOD)
-}
-
 ### Event Totals Between Daily Check-in Assessment Types
 
-for (col in second_cols) {
-  sum_col <- paste0(col, "_DAILY_SUM")
-  
-  Comp_DF <- Comp_DF %>%
-    group_by(USERID) %>%
-    arrange(USERID, EVENTDATE) %>%
-    mutate(PERIOD = cumsum(!is.na(DAILY))) %>%
-    group_by(USERID, PERIOD) %>%
-    mutate(!!sum_col := sum(.data[[col]], na.rm = TRUE)) %>%
-    ungroup() %>%
-    select(-PERIOD)
-}
+Comp_DF <- Comp_DF %>%
+  group_by(USERID, EVENTDATE) %>%
+  mutate(across(all_of(second_cols), ~ sum(.x, na.rm = TRUE), .names = "{.col}_DAILY_SUM")) %>%
+  ungroup()
 
 Comp_DF <- Comp_DF %>%
   mutate(across(
@@ -244,89 +212,15 @@ Comp_DF <- Comp_DF %>%
     ~ lag(.x)
   ))
 
-Comp_DF$Comp_JOURNEY_USE_M <- rowSums(Comp_DF[grep("MONTHLY_SUM", names(Comp_DF))])
-
 Comp_DF$Comp_JOURNEY_USE_D <- rowSums(Comp_DF[grep("DAILY_SUM", names(Comp_DF))])
 
 ```
 
 ## Subsetting to Monthly and Daily Trend Analysis File
 
-``` {r Subsetting_analytic_files}
-
-### Creating data file for those who start as Not-at-Risk and later transition to At-Risk
-
-Transitioned_Data <- Comp_DF[, -c(3:30,56:111)]
-
-Transitioned_Users <- Transitioned_Data %>%
-  arrange(USERID, EVENTDATE) %>%
-  group_by(USERID) %>%
-  mutate(ever_zero_so_far = cummax(PERIOD_RISK == 0)) %>%
-  filter(PERIOD_RISK == 1 & lag(ever_zero_so_far, default = FALSE)) %>%
-  ungroup() %>%
-  distinct(USERID) %>%
-  pull(USERID)
-
-# Step 2: Subset to keep ALL rows for those USERIDs
-Transitioned_Data <- Transitioned_Data %>%
-  filter(USERID %in% Transitioned_Users)
-
-Transitioned_Data <- Transitioned_Data %>%
-  arrange(USERID, EVENTDATE) %>%
-  group_by(USERID) %>%
-  mutate(
-    PERIOD = cumsum(!is.na(MONTHLY))  # increments every time a MONTHLY checkpoint is hit
-  ) %>%
-  ungroup()
-
-period_use_sums <- Transitioned_Data %>%
-  group_by(USERID, PERIOD) %>%
-  summarise(Comp_JOURNEY_USE_SUM = sum(Comp_JOURNEY_USE_D, na.rm = TRUE), .groups = "drop")
-
-Monthly_Risk_Transition <- Transitioned_Data %>%
-  left_join(period_use_sums, by = c("USERID", "PERIOD"))
-
-Monthly_DF <- Comp_DF[which(Comp_DF$MONTHLY == 1), -c(3:30)]  ### Update columns here if needed to remove appropriate vars
-
-Monthly_DF$TOTAL_JOURNEY_USE_M <- rowSums(Monthly_DF[grep("MONTHLY_SUM", names(Monthly_DF))])
-
-Monthly_DF_Risk <- Monthly_DF[which(Monthly_DF$ANY_RISK == 1),]
-
-Monthly_DF_Risk_R <- Monthly_DF_Risk[, -grep("_SUM", names(Monthly_DF_Risk))]
-
-obs_per_person <- table(Monthly_DF_Risk_R$USERID)
-
-Monthly_DF_Risk_Modeling <- Monthly_DF_Risk_R[Monthly_DF_Risk_R$USERID %in% names(obs_per_person[obs_per_person >= 3]), ]
-
-Daily_DF <- Comp_DF[which(Comp_DF$DAILY == 1), -c(3:30)]  ### Update columns here if needed to remove appropriate vars
-
-Daily_DF$TOTAL_JOURNEY_USE_D <- rowSums(Daily_DF[grep("DAILY_SUM", names(Daily_DF))])
-
-Daily_DF_Risk <- Daily_DF[which(Daily_DF$ANY_RISK == 1),]
-
-Daily_DF_Risk_R <- Daily_DF_Risk[, -grep("_SUM", names(Daily_DF_Risk))]
-
-obs_per_person <- table(Daily_DF_Risk_R$USERID)
-
-Daily_DF_Risk_Modeling <- Daily_DF_Risk_R[Daily_DF_Risk_R$USERID %in% names(obs_per_person[obs_per_person >= 3]), ]
-
-Monthly_Dep_Anx_GRP_1 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$DEP_ANX_RISK_GROUP == 1),]
-
-Monthly_Dep_Anx_GRP_2 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$DEP_ANX_RISK_GROUP == 2),]
-
-Monthly_Dep_Anx_GRP_3 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$DEP_ANX_RISK_GROUP == 3),]
-
-Monthly_Stress_GRP_1 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$STRESS_RISK_GROUP == 1),]
-
-Monthly_Stress_GRP_2 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$STRESS_RISK_GROUP == 2),]
-
-Monthly_Stress_GRP_3 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$STRESS_RISK_GROUP == 3),]
-
-```
-
 ``` {r sample_size_frequencies}
 
-### Based on the information Journey has provided, there appear to be approximately 6,700 participants with repeated assessment ### data and roughly 10,600 participants with repeated daily check-ins.
+### Based on the information Journey has provided, there appear to be approximately 6,700 participants with repeated assessment ### data and roughly 10,600 participants with repeated daily check-ins.Confirming that.
 
 
 Comp_DF %>%
@@ -367,10 +261,12 @@ Monthly_Assessments %>%
 
 ``` {r monthly_case_counts}
 
-abc <- Monthly_Risk_Transition %>%
+abc <- Comp_DF %>%
   mutate(EVENTDATE = as.Date(EVENTDATE)) %>%
+  arrange(USERID, EVENTDATE) %>%           # <-- added: cumsum() needs chronological order
   group_by(USERID) %>%
   mutate(
+    PERIOD = cumsum(!is.na(MONTHLY)),      # <-- added: recreate PERIOD, same logic as before
     .baseline_date = min(EVENTDATE, na.rm = TRUE),
 
     .start_window = !is.na(.baseline_date) &
@@ -453,10 +349,10 @@ build_end_risk <- function(data, target_months) {
 # 3. build_outcome_table(): from a data frame that already has
 #    START_RISK + END_RISK for one follow-up window, produces one row
 #    per USERID with START_RISK, END_RISK_<suffix>,
-#    SUM_JOURNEY_USE_M_<suffix>, and each of `score_cols` measured AT
+#    SUM_JOURNEY_USE_D_<suffix>, and each of `score_cols` measured AT
 #    the END_RISK marker's EVENTDATE (named "<col>_AT_END_RISK_<suffix>")
 # ---------------------------------------------------------------------
-build_outcome_table <- function(data_with_end_risk, monthly_df, suffix, score_cols) {
+build_outcome_table <- function(data_with_end_risk, journey_df, suffix, score_cols) {
 
   risk_subset <- data_with_end_risk %>%
     group_by(USERID) %>%
@@ -471,7 +367,7 @@ build_outcome_table <- function(data_with_end_risk, monthly_df, suffix, score_co
 
   sum_journey <- risk_subset %>%
     transmute(USERID, EVENTDATE, EVENTDATE_COPY = EVENTDATE) %>%
-    full_join(monthly_df[, c("USERID", "EVENTDATE", "TOTAL_JOURNEY_USE_M")],
+    full_join(journey_df[, c("USERID", "EVENTDATE", "Comp_JOURNEY_USE_D")],
               by = c("USERID", "EVENTDATE")) %>%
     mutate(EVENTDATE = as.Date(EVENTDATE), EVENTDATE_COPY = as.Date(EVENTDATE_COPY)) %>%
     arrange(USERID, EVENTDATE) %>%
@@ -485,9 +381,9 @@ build_outcome_table <- function(data_with_end_risk, monthly_df, suffix, score_co
         if (length(pos) >= 2) pos[2] else NA_integer_
       },
       .end_row    = ifelse(!is.na(.second_pop), .second_pop - 1L, max(.rn)),
-      SUM_JOURNEY_USE_M = ifelse(
+      SUM_JOURNEY_USE_D = ifelse(
         !is.na(.first_pop) & .rn == .first_pop,
-        sum(TOTAL_JOURNEY_USE_M[.rn >= .first_pop & .rn <= .end_row], na.rm = TRUE),
+        sum(Comp_JOURNEY_USE_D[.rn >= .first_pop & .rn <= .end_row], na.rm = TRUE),
         NA_real_
       )
     ) %>%
@@ -509,12 +405,12 @@ build_outcome_table <- function(data_with_end_risk, monthly_df, suffix, score_co
     ungroup() %>%
     select(USERID, START_RISK, END_RISK_final, all_of(score_end_names)) %>%
     left_join(
-      sum_journey %>% filter(!is.na(SUM_JOURNEY_USE_M)) %>% select(USERID, SUM_JOURNEY_USE_M),
+      sum_journey %>% filter(!is.na(SUM_JOURNEY_USE_D)) %>% select(USERID, SUM_JOURNEY_USE_D),
       by = "USERID"
     )
 
-  names(out)[names(out) == "END_RISK_final"]   <- paste0("END_RISK_", suffix)
-  names(out)[names(out) == "SUM_JOURNEY_USE_M"] <- paste0("SUM_JOURNEY_USE_M_", suffix)
+  names(out)[names(out) == "END_RISK_final"]     <- paste0("END_RISK_", suffix)
+  names(out)[names(out) == "SUM_JOURNEY_USE_D"]   <- paste0("SUM_JOURNEY_USE_D_", suffix)
 
   out
 }
@@ -526,9 +422,9 @@ build_outcome_table <- function(data_with_end_risk, monthly_df, suffix, score_co
 score_cols <- c("STRESSLEVEL", "MANAGEFEELINGSLEVEL", "FEELINGSFREQUENCY",
                  "DAYSEMOTIONALLYCHALLENGING", "MANAGESTRESSLEVEL")
 
-outcomes_1 <- build_outcome_table(build_end_risk(abc, 1), Monthly_DF, "1", score_cols)
-outcomes_3 <- build_outcome_table(build_end_risk(abc, 3), Monthly_DF, "3", score_cols)
-outcomes_6 <- build_outcome_table(build_end_risk(abc, 6), Monthly_DF, "6", score_cols)
+outcomes_1 <- build_outcome_table(build_end_risk(abc, 1), Comp_DF, "1", score_cols)
+outcomes_3 <- build_outcome_table(build_end_risk(abc, 3), Comp_DF, "3", score_cols)
+outcomes_6 <- build_outcome_table(build_end_risk(abc, 6), Comp_DF, "6", score_cols)
 
 # score values AT the START_RISK timepoint (same physical row regardless
 # of follow-up window, so computed once here rather than per suffix)
@@ -539,7 +435,7 @@ start_scores <- abc %>%
   rename_with(~ paste0(.x, "_AT_START_RISK"), all_of(score_cols))
 
 # ---------------------------------------------------------------------
-# 5. Sums of TOTAL_JOURNEY_USE_M BEFORE START_RISK: 1, 3, and 6 months
+# 5. Sums of Comp_JOURNEY_USE_D BEFORE START_RISK: 1, 3, and 6 months
 #    prior to the START_RISK date (window is [start_date - N months,
 #    start_date), i.e. up to but not including the START_RISK row
 #    itself).
@@ -550,20 +446,20 @@ start_dates <- abc %>%
   select(USERID, START_RISK_DATE = EVENTDATE)
 
 before_sums <- start_dates %>%
-  left_join(Monthly_DF[, c("USERID", "EVENTDATE", "TOTAL_JOURNEY_USE_M")], by = "USERID") %>%
+  left_join(Comp_DF[, c("USERID", "EVENTDATE", "Comp_JOURNEY_USE_D")], by = "USERID") %>%
   mutate(EVENTDATE = as.Date(EVENTDATE)) %>%
   group_by(USERID, START_RISK_DATE) %>%
   summarise(
-    SUM_JOURNEY_USE_M_BEFORE_1 = sum(
-      TOTAL_JOURNEY_USE_M[EVENTDATE >= START_RISK_DATE %m-% months(1) & EVENTDATE < START_RISK_DATE],
+    SUM_JOURNEY_USE_D_BEFORE_1 = sum(
+      Comp_JOURNEY_USE_D[EVENTDATE >= START_RISK_DATE %m-% months(1) & EVENTDATE < START_RISK_DATE],
       na.rm = TRUE
     ),
-    SUM_JOURNEY_USE_M_BEFORE_3 = sum(
-      TOTAL_JOURNEY_USE_M[EVENTDATE >= START_RISK_DATE %m-% months(3) & EVENTDATE < START_RISK_DATE],
+    SUM_JOURNEY_USE_D_BEFORE_3 = sum(
+      Comp_JOURNEY_USE_D[EVENTDATE >= START_RISK_DATE %m-% months(3) & EVENTDATE < START_RISK_DATE],
       na.rm = TRUE
     ),
-    SUM_JOURNEY_USE_M_BEFORE_6 = sum(
-      TOTAL_JOURNEY_USE_M[EVENTDATE >= START_RISK_DATE %m-% months(6) & EVENTDATE < START_RISK_DATE],
+    SUM_JOURNEY_USE_D_BEFORE_6 = sum(
+      Comp_JOURNEY_USE_D[EVENTDATE >= START_RISK_DATE %m-% months(6) & EVENTDATE < START_RISK_DATE],
       na.rm = TRUE
     ),
     .groups = "drop"
@@ -579,10 +475,10 @@ six_month_outcomes <- outcomes_1 %>%
   full_join(before_sums, by = "USERID") %>%
   full_join(start_scores, by = "USERID") %>%
   select(USERID, START_RISK,
-         END_RISK_1, SUM_JOURNEY_USE_M_1,
-         END_RISK_3, SUM_JOURNEY_USE_M_3,
-         END_RISK_6, SUM_JOURNEY_USE_M_6,
-         SUM_JOURNEY_USE_M_BEFORE_1, SUM_JOURNEY_USE_M_BEFORE_3, SUM_JOURNEY_USE_M_BEFORE_6,
+         END_RISK_1, SUM_JOURNEY_USE_D_1,
+         END_RISK_3, SUM_JOURNEY_USE_D_3,
+         END_RISK_6, SUM_JOURNEY_USE_D_6,
+         SUM_JOURNEY_USE_D_BEFORE_1, SUM_JOURNEY_USE_D_BEFORE_3, SUM_JOURNEY_USE_D_BEFORE_6,
          ends_with("_AT_START_RISK"),
          ends_with("_AT_END_RISK_1"),
          ends_with("_AT_END_RISK_3"),
@@ -599,18 +495,18 @@ six_month_outcomes <- outcomes_1 %>%
 six_month_outcomes <- six_month_outcomes %>%
   mutate(
     JOURNEY_INCREASE_1 = case_when(
-      is.na(SUM_JOURNEY_USE_M_1) | is.na(SUM_JOURNEY_USE_M_BEFORE_1) ~ NA_character_,
-      SUM_JOURNEY_USE_M_1 > SUM_JOURNEY_USE_M_BEFORE_1                ~ "YES",
+      is.na(SUM_JOURNEY_USE_D_1) | is.na(SUM_JOURNEY_USE_D_BEFORE_1) ~ NA_character_,
+      SUM_JOURNEY_USE_D_1 > SUM_JOURNEY_USE_D_BEFORE_1                ~ "YES",
       TRUE                                                            ~ "NO"
     ),
     JOURNEY_INCREASE_3 = case_when(
-      is.na(SUM_JOURNEY_USE_M_3) | is.na(SUM_JOURNEY_USE_M_BEFORE_3) ~ NA_character_,
-      SUM_JOURNEY_USE_M_3 > SUM_JOURNEY_USE_M_BEFORE_3                ~ "YES",
+      is.na(SUM_JOURNEY_USE_D_3) | is.na(SUM_JOURNEY_USE_D_BEFORE_3) ~ NA_character_,
+      SUM_JOURNEY_USE_D_3 > SUM_JOURNEY_USE_D_BEFORE_3                ~ "YES",
       TRUE                                                            ~ "NO"
     ),
     JOURNEY_INCREASE_6 = case_when(
-      is.na(SUM_JOURNEY_USE_M_6) | is.na(SUM_JOURNEY_USE_M_BEFORE_6) ~ NA_character_,
-      SUM_JOURNEY_USE_M_6 > SUM_JOURNEY_USE_M_BEFORE_6                ~ "YES",
+      is.na(SUM_JOURNEY_USE_D_6) | is.na(SUM_JOURNEY_USE_D_BEFORE_6) ~ NA_character_,
+      SUM_JOURNEY_USE_D_6 > SUM_JOURNEY_USE_D_BEFORE_6                ~ "YES",
       TRUE                                                            ~ "NO"
     ),
 
@@ -716,12 +612,14 @@ six_month_outcomes <- six_month_outcomes %>%
 #                     first EVENTDATE + window length)
 #     MEAN_FEELINGRATING_BEFORE_<suffix>      = mean(FEELINGRATING) in that window
 #     SUM_COMP_JOURNEY_USE_D_BEFORE_<suffix>  = sum(Comp_JOURNEY_USE_D) in that window
+#     COUNT_FEELING2_BEFORE_<suffix>          = number of times FEELINGRATING == 2 in that window
 #
 #   AFTER window  = [the EVENTDATE immediately following the LAST
 #                     EVENTDATE included in the BEFORE_<suffix> window,
 #                     that same start date + window length)
 #     MEAN_FEELINGRATING_AFTER_<suffix>       = mean(FEELINGRATING) in that window
 #     SUM_COMP_JOURNEY_USE_D_AFTER_<suffix>   = sum(Comp_JOURNEY_USE_D) in that window
+#     COUNT_FEELING2_AFTER_<suffix>           = number of times FEELINGRATING == 2 in that window
 #
 # suffix is one of: 1WK, 2WK, 1, 3, 6 (the last three being months)
 #
@@ -730,9 +628,9 @@ six_month_outcomes <- six_month_outcomes %>%
 # length, since a longer BEFORE window naturally ends later. So each
 # AFTER_<suffix> window starts on a different date.
 #
-# All 20 new columns (mean/sum x before/after x 5 window lengths) are
-# broadcast onto EVERY row for that USERID before being collapsed down
-# to a single row per USERID in the final step below.
+# All 30 new columns (mean/sum/count x before/after x 5 window lengths)
+# are broadcast onto EVERY row for that USERID before being collapsed
+# down to a single row per USERID in the final step below.
 #
 # If a USERID has no EVENTDATE after a given BEFORE window closes, the
 # AFTER columns for that window length are NA.
@@ -742,13 +640,13 @@ six_month_outcomes <- six_month_outcomes %>%
 daily_cases <- Comp_DF
 daily_cases$EVENTDATE <- as.Date(daily_cases$EVENTDATE, format = "%Y-%m-%d")
 
-# ---- 2. Helper: build BEFORE/AFTER mean + sum columns for one window
-#         length, returning one row per USERID with columns suffixed by
-#         that window length. `add_period` is a function that takes a
-#         Date and returns that date plus the window length (e.g.
-#         `function(d) d %m+% months(3)` or `function(d) d + weeks(1)`),
-#         which lets the same helper handle both week- and month-based
-#         windows. ---------------------------------------------------
+# ---- 2. Helper: build BEFORE/AFTER mean + sum + count columns for one
+#         window length, returning one row per USERID with columns
+#         suffixed by that window length. `add_period` is a function
+#         that takes a Date and returns that date plus the window
+#         length (e.g. `function(d) d %m+% months(3)` or
+#         `function(d) d + weeks(1)`), which lets the same helper
+#         handle both week- and month-based windows. -----------------
 build_before_after <- function(data, add_period, suffix) {
   data %>%
     group_by(USERID) %>%
@@ -771,6 +669,10 @@ build_before_after <- function(data, add_period, suffix) {
         Comp_JOURNEY_USE_D[EVENTDATE >= .baseline_date & EVENTDATE < .before_end],
         na.rm = TRUE
       ),
+      COUNT_FEELING2_BEFORE = sum(
+        FEELINGRATING[EVENTDATE >= .baseline_date & EVENTDATE < .before_end] == 2,
+        na.rm = TRUE
+      ),
 
       # AFTER window starts at the next EVENTDATE strictly after the
       # last date included in the BEFORE window
@@ -789,6 +691,10 @@ build_before_after <- function(data, add_period, suffix) {
       SUM_COMP_JOURNEY_USE_D_AFTER = ifelse(
         is.na(.after_start), NA_real_,
         sum(Comp_JOURNEY_USE_D[EVENTDATE >= .after_start & EVENTDATE < .after_end], na.rm = TRUE)
+      ),
+      COUNT_FEELING2_AFTER = ifelse(
+        is.na(.after_start), NA_real_,
+        sum(FEELINGRATING[EVENTDATE >= .after_start & EVENTDATE < .after_end] == 2, na.rm = TRUE)
       ),
       .groups = "drop"
     ) %>%
@@ -908,10 +814,37 @@ daily_cases <- daily_cases %>%
 daily_cases <- daily_cases %>% 
   distinct(USERID, .keep_all = TRUE)
 
+# ---------------------------------------------------------------------
+# 6. Print range + average of SUM_COMP_JOURNEY_USE_D and
+#    COUNT_FEELING2, across USERIDs, for each BEFORE/AFTER window
+# ---------------------------------------------------------------------
+print_range_avg <- function(data, col_name, label) {
+  vals <- data[[col_name]]
+  vals <- vals[!is.na(vals)]
+  if (length(vals) == 0) {
+    cat(label, ": no valid data\n")
+    return(invisible(NULL))
+  }
+  cat(sprintf("%-55s Range: %6s to %-6s | Average: %s\n",
+              label, round(min(vals), 2), round(max(vals), 2), round(mean(vals), 2)))
+}
+
+window_suffixes <- c("1WK", "2WK", "1", "3", "6")
+
+for (s in window_suffixes) {
+  print_range_avg(daily_cases, paste0("SUM_COMP_JOURNEY_USE_D_BEFORE_", s),
+                   paste0("Comp Journey Use (Sum) -- BEFORE ", s))
+  print_range_avg(daily_cases, paste0("SUM_COMP_JOURNEY_USE_D_AFTER_", s),
+                   paste0("Comp Journey Use (Sum) -- AFTER ", s))
+  print_range_avg(daily_cases, paste0("COUNT_FEELING2_BEFORE_", s),
+                   paste0("# Times FEELINGRATING = 2 -- BEFORE ", s))
+  print_range_avg(daily_cases, paste0("COUNT_FEELING2_AFTER_", s),
+                   paste0("# Times FEELINGRATING = 2 -- AFTER ", s))
+}
+
 ```
 
 # Daily Case Counts - Low Scores
-
 
 ``` {r daily_case_counts_low_scores}
 
@@ -931,12 +864,14 @@ daily_cases <- daily_cases %>%
 #   BEFORE window = [BASELINE_DATE, BASELINE_DATE + window length)
 #     MEAN_FEELINGRATING_BEFORE_<suffix>      = mean(FEELINGRATING) in that window
 #     SUM_COMP_JOURNEY_USE_D_BEFORE_<suffix>  = sum(Comp_JOURNEY_USE_D) in that window
+#     COUNT_FEELING2_BEFORE_<suffix>          = number of times FEELINGRATING == 2 in that window
 #
 #   AFTER window  = [the EVENTDATE immediately following the LAST
 #                     EVENTDATE included in the BEFORE_<suffix> window,
 #                     that same start date + window length)
 #     MEAN_FEELINGRATING_AFTER_<suffix>       = mean(FEELINGRATING) in that window
 #     SUM_COMP_JOURNEY_USE_D_AFTER_<suffix>   = sum(Comp_JOURNEY_USE_D) in that window
+#     COUNT_FEELING2_AFTER_<suffix>           = number of times FEELINGRATING == 2 in that window
 #
 # USERIDs who never reported a FEELINGRATING of 1 or 2 are dropped
 # entirely before any of the BEFORE/AFTER calculations run.
@@ -963,14 +898,14 @@ baseline_dates <- daily_cases_low_feeling %>%
   group_by(USERID) %>%
   summarise(BASELINE_DATE = min(EVENTDATE, na.rm = TRUE), .groups = "drop")
 
-# ---- 3. Helper: build BEFORE/AFTER mean + sum columns for one window
-#         length, returning one row per USERID with columns suffixed by
-#         that window length. `baseline_dates` supplies the per-USERID
-#         BEFORE-window start date. `add_period` is a function that
-#         takes a Date and returns that date plus the window length
-#         (e.g. `function(d) d %m+% months(3)` or `function(d) d + weeks(1)`),
-#         letting the same helper handle both week- and month-based
-#         windows. -----------------------------------------------------
+# ---- 3. Helper: build BEFORE/AFTER mean + sum + count columns for one
+#         window length, returning one row per USERID with columns
+#         suffixed by that window length. `baseline_dates` supplies the
+#         per-USERID BEFORE-window start date. `add_period` is a
+#         function that takes a Date and returns that date plus the
+#         window length (e.g. `function(d) d %m+% months(3)` or
+#         `function(d) d + weeks(1)`), letting the same helper handle
+#         both week- and month-based windows. -------------------------
 build_before_after <- function(data, baseline_dates, add_period, suffix) {
   data %>%
     left_join(baseline_dates, by = "USERID") %>%
@@ -993,6 +928,10 @@ build_before_after <- function(data, baseline_dates, add_period, suffix) {
         Comp_JOURNEY_USE_D[EVENTDATE >= BASELINE_DATE & EVENTDATE < .before_end],
         na.rm = TRUE
       ),
+      COUNT_FEELING2_BEFORE = sum(
+        FEELINGRATING[EVENTDATE >= BASELINE_DATE & EVENTDATE < .before_end] == 2,
+        na.rm = TRUE
+      ),
 
       # AFTER window starts at the next EVENTDATE strictly after the
       # last date included in the BEFORE window
@@ -1011,6 +950,10 @@ build_before_after <- function(data, baseline_dates, add_period, suffix) {
       SUM_COMP_JOURNEY_USE_D_AFTER = ifelse(
         is.na(.after_start), NA_real_,
         sum(Comp_JOURNEY_USE_D[EVENTDATE >= .after_start & EVENTDATE < .after_end], na.rm = TRUE)
+      ),
+      COUNT_FEELING2_AFTER = ifelse(
+        is.na(.after_start), NA_real_,
+        sum(FEELINGRATING[EVENTDATE >= .after_start & EVENTDATE < .after_end] == 2, na.rm = TRUE)
       ),
       .groups = "drop"
     ) %>%
@@ -1119,6 +1062,34 @@ daily_cases_low_feeling <- daily_cases_low_feeling %>%
 daily_cases_low_feeling <- daily_cases_low_feeling %>% 
   distinct(USERID, .keep_all = TRUE)
 
+# ---------------------------------------------------------------------
+# 7. Print range + average of SUM_COMP_JOURNEY_USE_D and
+#    COUNT_FEELING2, across USERIDs, for each BEFORE/AFTER window
+# ---------------------------------------------------------------------
+print_range_avg <- function(data, col_name, label) {
+  vals <- data[[col_name]]
+  vals <- vals[!is.na(vals)]
+  if (length(vals) == 0) {
+    cat(label, ": no valid data\n")
+    return(invisible(NULL))
+  }
+  cat(sprintf("%-55s Range: %6s to %-6s | Average: %s\n",
+              label, round(min(vals), 2), round(max(vals), 2), round(mean(vals), 2)))
+}
+
+window_suffixes <- c("1WK", "2WK", "1", "3", "6")
+
+for (s in window_suffixes) {
+  print_range_avg(daily_cases_low_feeling, paste0("SUM_COMP_JOURNEY_USE_D_BEFORE_", s),
+                   paste0("Comp Journey Use (Sum) -- BEFORE ", s))
+  print_range_avg(daily_cases_low_feeling, paste0("SUM_COMP_JOURNEY_USE_D_AFTER_", s),
+                   paste0("Comp Journey Use (Sum) -- AFTER ", s))
+  print_range_avg(daily_cases_low_feeling, paste0("COUNT_FEELING2_BEFORE_", s),
+                   paste0("# Times FEELINGRATING = 2 -- BEFORE ", s))
+  print_range_avg(daily_cases_low_feeling, paste0("COUNT_FEELING2_AFTER_", s),
+                   paste0("# Times FEELINGRATING = 2 -- AFTER ", s))
+}
+
 ```
 
 # Daily Case Counts - Rolling Min
@@ -1158,14 +1129,14 @@ baseline_dates <- daily_cases_rolling_min %>%
     .groups = "drop"
   )
 
-# ---- 3. Helper: build BEFORE/AFTER mean + sum columns for one window
-#         length, returning one row per USERID with columns suffixed by
-#         that window length. `baseline_dates` supplies the per-USERID
-#         BEFORE-window start date. `add_period` is a function that
-#         takes a Date and returns that date plus the window length
-#         (e.g. `function(d) d %m+% months(3)` or `function(d) d + weeks(1)`),
-#         letting the same helper handle both week- and month-based
-#         windows. -----------------------------------------------------
+# ---- 3. Helper: build BEFORE/AFTER mean + sum + count columns for one
+#         window length, returning one row per USERID with columns
+#         suffixed by that window length. `baseline_dates` supplies the
+#         per-USERID BEFORE-window start date. `add_period` is a
+#         function that takes a Date and returns that date plus the
+#         window length (e.g. `function(d) d %m+% months(3)` or
+#         `function(d) d + weeks(1)`), letting the same helper handle
+#         both week- and month-based windows. -------------------------
 build_before_after <- function(data, baseline_dates, add_period, suffix) {
   data %>%
     left_join(baseline_dates, by = "USERID") %>%
@@ -1188,6 +1159,10 @@ build_before_after <- function(data, baseline_dates, add_period, suffix) {
         is.na(BASELINE_DATE[1]), NA_real_,
         sum(Comp_JOURNEY_USE_D[EVENTDATE >= BASELINE_DATE & EVENTDATE < .before_end], na.rm = TRUE)
       ),
+      COUNT_FEELING2_BEFORE = ifelse(
+        is.na(BASELINE_DATE[1]), NA_real_,
+        sum(FEELINGRATING[EVENTDATE >= BASELINE_DATE & EVENTDATE < .before_end] == 2, na.rm = TRUE)
+      ),
 
       # AFTER window starts at the next EVENTDATE strictly after the
       # last date included in the BEFORE window
@@ -1206,6 +1181,10 @@ build_before_after <- function(data, baseline_dates, add_period, suffix) {
       SUM_COMP_JOURNEY_USE_D_AFTER = ifelse(
         is.na(.after_start), NA_real_,
         sum(Comp_JOURNEY_USE_D[EVENTDATE >= .after_start & EVENTDATE < .after_end], na.rm = TRUE)
+      ),
+      COUNT_FEELING2_AFTER = ifelse(
+        is.na(.after_start), NA_real_,
+        sum(FEELINGRATING[EVENTDATE >= .after_start & EVENTDATE < .after_end] == 2, na.rm = TRUE)
       ),
       .groups = "drop"
     ) %>%
@@ -1312,6 +1291,34 @@ daily_cases_rolling_min <- daily_cases_rolling_min %>%
 
 daily_cases_rolling_min <- daily_cases_rolling_min %>% 
   distinct(USERID, .keep_all = TRUE)
+
+# ---------------------------------------------------------------------
+# 7. Print range + average of SUM_COMP_JOURNEY_USE_D and
+#    COUNT_FEELING2, across USERIDs, for each BEFORE/AFTER window
+# ---------------------------------------------------------------------
+print_range_avg <- function(data, col_name, label) {
+  vals <- data[[col_name]]
+  vals <- vals[!is.na(vals)]
+  if (length(vals) == 0) {
+    cat(label, ": no valid data\n")
+    return(invisible(NULL))
+  }
+  cat(sprintf("%-55s Range: %6s to %-6s | Average: %s\n",
+              label, round(min(vals), 2), round(max(vals), 2), round(mean(vals), 2)))
+}
+
+window_suffixes <- c("1WK", "2WK", "1", "3", "6")
+
+for (s in window_suffixes) {
+  print_range_avg(daily_cases_rolling_min, paste0("SUM_COMP_JOURNEY_USE_D_BEFORE_", s),
+                   paste0("Comp Journey Use (Sum) -- BEFORE ", s))
+  print_range_avg(daily_cases_rolling_min, paste0("SUM_COMP_JOURNEY_USE_D_AFTER_", s),
+                   paste0("Comp Journey Use (Sum) -- AFTER ", s))
+  print_range_avg(daily_cases_rolling_min, paste0("COUNT_FEELING2_BEFORE_", s),
+                   paste0("# Times FEELINGRATING = 2 -- BEFORE ", s))
+  print_range_avg(daily_cases_rolling_min, paste0("COUNT_FEELING2_AFTER_", s),
+                   paste0("# Times FEELINGRATING = 2 -- AFTER ", s))
+}
 
 ```
 
@@ -1864,6 +1871,111 @@ crosstab_6_rolling_min
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+``` {r Subsetting_analytic_files}
+
+### Creating data file for those who start as Not-at-Risk and later transition to At-Risk
+
+Transitioned_Data <- Comp_DF[, -c(3:30,56:111)]
+
+Transitioned_Users <- Transitioned_Data %>%
+  arrange(USERID, EVENTDATE) %>%
+  group_by(USERID) %>%
+  mutate(ever_zero_so_far = cummax(PERIOD_RISK == 0)) %>%
+  filter(PERIOD_RISK == 1 & lag(ever_zero_so_far, default = FALSE)) %>%
+  ungroup() %>%
+  distinct(USERID) %>%
+  pull(USERID)
+
+# Step 2: Subset to keep ALL rows for those USERIDs
+Transitioned_Data <- Transitioned_Data %>%
+  filter(USERID %in% Transitioned_Users)
+
+Transitioned_Data <- Transitioned_Data %>%
+  arrange(USERID, EVENTDATE) %>%
+  group_by(USERID) %>%
+  mutate(
+    PERIOD = cumsum(!is.na(MONTHLY))  # increments every time a MONTHLY checkpoint is hit
+  ) %>%
+  ungroup()
+
+period_use_sums <- Transitioned_Data %>%
+  group_by(USERID, PERIOD) %>%
+  summarise(Comp_JOURNEY_USE_SUM = sum(Comp_JOURNEY_USE_D, na.rm = TRUE), .groups = "drop")
+
+Monthly_Risk_Transition <- Transitioned_Data %>%
+  left_join(period_use_sums, by = c("USERID", "PERIOD"))
+
+Monthly_DF <- Comp_DF[which(Comp_DF$MONTHLY == 1), -c(3:30)]  ### Update columns here if needed to remove appropriate vars
+
+#Monthly_DF$TOTAL_JOURNEY_USE_M <- rowSums(Monthly_DF[grep("MONTHLY_SUM", names(Monthly_DF))])
+
+Monthly_DF_Risk <- Monthly_DF[which(Monthly_DF$ANY_RISK == 1),]
+
+Monthly_DF_Risk_R <- Monthly_DF_Risk[, -grep("_SUM", names(Monthly_DF_Risk))]
+
+obs_per_person <- table(Monthly_DF_Risk_R$USERID)
+
+Monthly_DF_Risk_Modeling <- Monthly_DF_Risk_R[Monthly_DF_Risk_R$USERID %in% names(obs_per_person[obs_per_person >= 3]), ]
+
+Daily_DF <- Comp_DF[which(Comp_DF$DAILY == 1), -c(3:30)]  ### Update columns here if needed to remove appropriate vars
+
+Daily_DF$TOTAL_JOURNEY_USE_D <- rowSums(Daily_DF[grep("DAILY_SUM", names(Daily_DF))])
+
+Daily_DF_Risk <- Daily_DF[which(Daily_DF$ANY_RISK == 1),]
+
+Daily_DF_Risk_R <- Daily_DF_Risk[, -grep("_SUM", names(Daily_DF_Risk))]
+
+obs_per_person <- table(Daily_DF_Risk_R$USERID)
+
+Daily_DF_Risk_Modeling <- Daily_DF_Risk_R[Daily_DF_Risk_R$USERID %in% names(obs_per_person[obs_per_person >= 3]), ]
+
+Monthly_Dep_Anx_GRP_1 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$DEP_ANX_RISK_GROUP == 1),]
+
+Monthly_Dep_Anx_GRP_2 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$DEP_ANX_RISK_GROUP == 2),]
+
+Monthly_Dep_Anx_GRP_3 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$DEP_ANX_RISK_GROUP == 3),]
+
+Monthly_Stress_GRP_1 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$STRESS_RISK_GROUP == 1),]
+
+Monthly_Stress_GRP_2 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$STRESS_RISK_GROUP == 2),]
+
+Monthly_Stress_GRP_3 <- Monthly_DF_Risk_Modeling[which(Monthly_DF_Risk_Modeling$STRESS_RISK_GROUP == 3),]
+
+```
 
 ``` {r monthly_out_pred_correlations}
 
@@ -2588,7 +2700,9 @@ testmodel <- lmer(
 
 summary(testmodel)
 
-bbb <- Monthly_Risk_Transition[which(Monthly_Risk_Transition$USERID == 6),]
+bbb <- daily_cases_low_feeling[which(daily_cases_low_feeling$SUM_COMP_JOURNEY_USE_D_BEFORE_1WK > 5000),c(1,115)]
+
+abb <- Comp_DF[which(Comp_DF$USERID == 5768671),]
 
 table(Daily_Checks$FEELINGRATING)
 

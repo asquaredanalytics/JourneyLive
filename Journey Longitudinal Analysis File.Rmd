@@ -36,43 +36,9 @@ daily_cases_low_feeling <- read.csv("G:/My Drive/Inzights/Journey/July 2026 Long
 
 daily_cases_rolling_min <- read.csv("G:/My Drive/Inzights/Journey/July 2026 Longitudinal/daily_cases_rolling_min.csv")
 
-```
+Comp_DF <- read.csv("G:/My Drive/Inzights/Journey/July 2026 Longitudinal/Comp_DF.csv")
 
-``` {r sample_size_frequencies}
-
-### Based on the information Journey has provided, there appear to be approximately 6,700 participants with repeated assessment ### data and roughly 10,600 participants with repeated daily check-ins.Confirming that.
-
-Comp_DF %>%
-  count(USERID) %>%
-  #filter(n > 2) %>%
-  summarise(distinct_users = n())
-
-Daily_Checks %>%
-  group_by(USERID) %>%
-  summarise(
-    sum_daily   = sum(DAILY, na.rm = TRUE)
-  ) %>%
-  filter(sum_daily > 1) %>%
-  summarise(distinct_users = n())
-
-
-Monthly_Assessments %>%
-  group_by(USERID) %>%
-  summarise(
-    sum_monthly = sum(MONTHLY, na.rm = TRUE)
-  ) %>%
-  filter(sum_monthly > 1) %>%
-  summarise(distinct_users = n())
-
-
-  Comp_DF %>%
-  group_by(USERID) %>%
-  summarise(
-    sum_daily   = sum(DAILY, na.rm = TRUE),
-    sum_monthly = sum(MONTHLY, na.rm = TRUE)
-  ) %>%
-  filter(sum_daily > 1 & sum_monthly > 1) %>%
-  summarise(distinct_users = n())
+six_month_outcomes <- read.csv("G:/My Drive/Inzights/Journey/July 2026 Longitudinal/six_month_outcomes.csv")
 
 ```
 
@@ -144,7 +110,13 @@ crosstab_list[["JOURNEY_INCREASE_1_vs_END_RISK_1"]]
 
 # to view/render every table in sequence (e.g. in an R Markdown chunk
 # with results='asis'):
-for (tbl in crosstab_list) print(tbl)
+for (tbl in crosstab_list){
+  
+  print(tbl)
+  
+}
+
+
 
 ```
 
@@ -390,6 +362,41 @@ crosstab_6_low <- daily_cases_low_feeling %>%
 
 crosstab_6_low
 
+print_range_avg <- function(data, col_name, label) {
+  vals <- data[[col_name]]
+  vals <- vals[!is.na(vals)]
+  if (length(vals) == 0) {
+    cat(label, ": no valid data\n")
+    return(invisible(NULL))
+  }
+  cat(sprintf("%-55s Range: %6s to %-6s | Average: %s\n",
+              label, round(min(vals), 2), round(max(vals), 2), round(mean(vals), 2)))
+}
+
+window_suffixes <- c("1WK", "2WK", "1", "3", "6")
+
+for (s in window_suffixes) {
+  print_range_avg(daily_cases_low_feeling, paste0("SUM_COMP_JOURNEY_USE_D_BEFORE_", s),
+                   paste0("Comp Journey Use (Sum) -- BEFORE ", s))
+  print_range_avg(daily_cases_low_feeling, paste0("SUM_COMP_JOURNEY_USE_D_AFTER_", s),
+                   paste0("Comp Journey Use (Sum) -- AFTER ", s))
+  print_range_avg(daily_cases_low_feeling, paste0("COUNT_FEELING1_BEFORE_", s),
+                   paste0("# Times FEELINGRATING = 1 -- BEFORE ", s))
+  print_range_avg(daily_cases_low_feeling, paste0("COUNT_FEELING1_AFTER_", s),
+                   paste0("# Times FEELINGRATING = 1 -- AFTER ", s))
+}
+
+for (s in window_suffixes) {
+  print_range_avg(daily_cases_low_feeling, paste0("SUM_COMP_JOURNEY_USE_D_BEFORE_", s),
+                   paste0("Comp Journey Use (Sum) -- BEFORE ", s))
+  print_range_avg(daily_cases_low_feeling, paste0("SUM_COMP_JOURNEY_USE_D_AFTER_", s),
+                   paste0("Comp Journey Use (Sum) -- AFTER ", s))
+  print_range_avg(daily_cases_low_feeling, paste0("COUNT_FEELING2_BEFORE_", s),
+                   paste0("# Times FEELINGRATING = 2 -- BEFORE ", s))
+  print_range_avg(daily_cases_low_feeling, paste0("COUNT_FEELING2_AFTER_", s),
+                   paste0("# Times FEELINGRATING = 2 -- AFTER ", s))
+}
+
 ```
 
 # Daily Case Counts Plots - Rolling Minimum
@@ -505,6 +512,17 @@ crosstab_6_rolling_min <- daily_cases_rolling_min %>%
   modify_caption("**Did Journey Use and Mood Change Over the Last 6 Months? -- Rolling Minimum**")  # <-- customize title here
 
 crosstab_6_rolling_min
+
+for (s in window_suffixes) {
+  print_range_avg(daily_cases_rolling_min, paste0("SUM_COMP_JOURNEY_USE_D_BEFORE_", s),
+                   paste0("Comp Journey Use (Sum) -- BEFORE ", s))
+  print_range_avg(daily_cases_rolling_min, paste0("SUM_COMP_JOURNEY_USE_D_AFTER_", s),
+                   paste0("Comp Journey Use (Sum) -- AFTER ", s))
+  print_range_avg(daily_cases_rolling_min, paste0("COUNT_FEELING2_BEFORE_", s),
+                   paste0("# Times FEELINGRATING = 2 -- BEFORE ", s))
+  print_range_avg(daily_cases_rolling_min, paste0("COUNT_FEELING2_AFTER_", s),
+                   paste0("# Times FEELINGRATING = 2 -- AFTER ", s))
+}
 
 ```
 

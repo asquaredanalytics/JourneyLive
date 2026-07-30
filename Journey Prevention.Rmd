@@ -933,6 +933,10 @@ build_before_after <- function(data, baseline_dates, add_period, suffix) {
         Comp_JOURNEY_USE_D[EVENTDATE >= BASELINE_DATE & EVENTDATE < .before_end],
         na.rm = TRUE
       ),
+      COUNT_FEELING1_BEFORE = sum(
+        FEELINGRATING[EVENTDATE >= BASELINE_DATE & EVENTDATE < .before_end] == 1,
+        na.rm = TRUE
+      ),
       COUNT_FEELING2_BEFORE = sum(
         FEELINGRATING[EVENTDATE >= BASELINE_DATE & EVENTDATE < .before_end] == 2,
         na.rm = TRUE
@@ -955,6 +959,10 @@ build_before_after <- function(data, baseline_dates, add_period, suffix) {
       SUM_COMP_JOURNEY_USE_D_AFTER = ifelse(
         is.na(.after_start), NA_real_,
         sum(Comp_JOURNEY_USE_D[EVENTDATE >= .after_start & EVENTDATE < .after_end], na.rm = TRUE)
+      ),
+      COUNT_FEELING1_AFTER = ifelse(
+        is.na(.after_start), NA_real_,
+        sum(FEELINGRATING[EVENTDATE >= .after_start & EVENTDATE < .after_end] == 1, na.rm = TRUE)
       ),
       COUNT_FEELING2_AFTER = ifelse(
         is.na(.after_start), NA_real_,
@@ -1090,10 +1098,21 @@ for (s in window_suffixes) {
                    paste0("Comp Journey Use (Sum) -- BEFORE ", s))
   print_range_avg(daily_cases_low_feeling, paste0("SUM_COMP_JOURNEY_USE_D_AFTER_", s),
                    paste0("Comp Journey Use (Sum) -- AFTER ", s))
-  print_range_avg(daily_cases_low_feeling, paste0("COUNT_FEELING2_BEFORE_", s),
+  print_range_avg(daily_cases_low_feeling, paste0("COUNT_FEELING1_BEFORE_", s),
                    paste0("# Times FEELINGRATING = 1 -- BEFORE ", s))
-  print_range_avg(daily_cases_low_feeling, paste0("COUNT_FEELING2_AFTER_", s),
+  print_range_avg(daily_cases_low_feeling, paste0("COUNT_FEELING1_AFTER_", s),
                    paste0("# Times FEELINGRATING = 1 -- AFTER ", s))
+}
+
+for (s in window_suffixes) {
+  print_range_avg(daily_cases_low_feeling, paste0("SUM_COMP_JOURNEY_USE_D_BEFORE_", s),
+                   paste0("Comp Journey Use (Sum) -- BEFORE ", s))
+  print_range_avg(daily_cases_low_feeling, paste0("SUM_COMP_JOURNEY_USE_D_AFTER_", s),
+                   paste0("Comp Journey Use (Sum) -- AFTER ", s))
+  print_range_avg(daily_cases_low_feeling, paste0("COUNT_FEELING2_BEFORE_", s),
+                   paste0("# Times FEELINGRATING = 2 -- BEFORE ", s))
+  print_range_avg(daily_cases_low_feeling, paste0("COUNT_FEELING2_AFTER_", s),
+                   paste0("# Times FEELINGRATING = 2 -- AFTER ", s))
 }
 
 ```
@@ -1740,5 +1759,87 @@ crosstab_6_rolling_min <- daily_cases_rolling_min %>%
   modify_caption("**Did Journey Use and Mood Change Over the Last 6 Months? -- Rolling Minimum**")  # <-- customize title here
 
 crosstab_6_rolling_min
+
+```
+
+# Low Mood and Usage Correlations
+
+```{r Low_Mood_Usage_Correlations}
+
+Outcomes <- c("MEAN_FEELINGRATING_BEFORE_1WK", "MEAN_FEELINGRATING_BEFORE_2WK", "MEAN_FEELINGRATING_BEFORE_1", "MEAN_FEELINGRATING_BEFORE_3", "MEAN_FEELINGRATING_BEFORE_6", "MEAN_FEELINGRATING_AFTER_1WK", "MEAN_FEELINGRATING_AFTER_2WK", "MEAN_FEELINGRATING_AFTER_1", "MEAN_FEELINGRATING_AFTER_3", "MEAN_FEELINGRATING_AFTER_6")
+
+Pred <- daily_cases_low_feeling[, which(grepl("SUM_COMP_JOURNEY_USE_D_", names(daily_cases_low_feeling)) | names(daily_cases_low_feeling) %in% Outcomes)]
+
+Cors_list <- NULL
+
+for (i in Outcomes) {
+  
+  ctest_M <- corr.test(Pred)
+  r_value_M <- round(ctest_M$r[, i], 4)
+  p_value_M <- round(ctest_M$p[, i], 4)
+  n_value_M <- ctest_M$n[, i]
+  
+  Low_Mood_Cors <- data.frame(Correlation = r_value_M, P_Value = p_value_M, N = n_value_M, Outcome = i)
+  
+  Low_Mood_Cors$Predictor <- sub(".*\\.", "", rownames(Low_Mood_Cors))
+  
+  Cors_list[[i]] <- Low_Mood_Cors
+  
+}
+
+Low_Mood_Cors_DF <- do.call(rbind, Cors_list)
+
+rownames(Low_Mood_Cors_DF) <- NULL
+
+Low_Mood_Cors_DF <- Low_Mood_Cors_DF[which(grepl("MEAN_", Low_Mood_Cors_DF$Outcome) & grepl("SUM_", Low_Mood_Cors_DF$Predictor) & Low_Mood_Cors_DF$P_Value < .1),]
+
+```
+
+# Rolling Min Mood and Usage Correlations
+
+```{r Rolling_Min_Usage_Correlations}
+
+Outcomes <- c("MEAN_FEELINGRATING_BEFORE_1WK", "MEAN_FEELINGRATING_BEFORE_2WK", "MEAN_FEELINGRATING_BEFORE_1", "MEAN_FEELINGRATING_BEFORE_3", "MEAN_FEELINGRATING_BEFORE_6", "MEAN_FEELINGRATING_AFTER_1WK", "MEAN_FEELINGRATING_AFTER_2WK", "MEAN_FEELINGRATING_AFTER_1", "MEAN_FEELINGRATING_AFTER_3", "MEAN_FEELINGRATING_AFTER_6")
+
+Pred <- daily_cases_rolling_min[, which(grepl("SUM_COMP_JOURNEY_USE_D_", names(daily_cases_rolling_min)) | names(daily_cases_rolling_min) %in% Outcomes)]
+
+Cors_list <- NULL
+
+for (i in Outcomes) {
+  
+  ctest_M <- corr.test(Pred)
+  r_value_M <- round(ctest_M$r[, i], 4)
+  p_value_M <- round(ctest_M$p[, i], 4)
+  n_value_M <- ctest_M$n[, i]
+  
+  rolling_min_cors <- data.frame(Correlation = r_value_M, P_Value = p_value_M, N = n_value_M, Outcome = i)
+  
+  rolling_min_cors$Predictor <- sub(".*\\.", "", rownames(rolling_min_cors))
+  
+  Cors_list[[i]] <- rolling_min_cors
+  
+}
+
+rolling_min_cors_DF <- do.call(rbind, Cors_list)
+
+rownames(rolling_min_cors_DF) <- NULL
+
+rolling_min_cors_DF <- rolling_min_cors_DF[which(grepl("MEAN_", rolling_min_cors_DF$Outcome) & grepl("SUM_", rolling_min_cors_DF$Predictor) & rolling_min_cors_DF$P_Value < .1),]
+
+```
+
+
+
+
+
+corr.test(daily_cases_low_feeling$SUM_COMP_JOURNEY_USE_D_BEFORE_1WK, daily_cases_low_feeling$MEAN_FEELINGRATING_BEFORE_1WK)
+
+corr.test(daily_cases_low_feeling$SUM_COMP_JOURNEY_USE_D_BEFORE_1WK, daily_cases_low_feeling$MEAN_FEELINGRATING_BEFORE_2WK)
+          
+            Sum_comp_journey_use_d_after_6, daily_cases_low_feeling$mean_feelingrating_after_6)
+
+
+
+
 
 ```

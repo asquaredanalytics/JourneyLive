@@ -31,7 +31,7 @@ library(gt)
 library(webshot2)
 library(knitr)
 
-Monthly_Assessments <- read.csv("G:/My Drive/Inzights/Journey/July 2026 Longitudinal/Monthly Assessments.csv")
+Monthly_Assessments <- read.csv("G:/My Drive/Inzights/Journey/July 2026 Longitudinal/Monthlies.csv")
 
 daily_cases <- read.csv("G:/My Drive/Inzights/Journey/July 2026 Longitudinal/daily_cases_startline.csv")
 
@@ -646,7 +646,20 @@ measure_summary <- Low_Mood_Monthly_Assessments %>%
     .names = "{.col}_{.fn}"
   ))
 
-measure_summary
+print(measure_summary)
+
+distinct_dates_per_user <- Low_Mood_Monthly_Assessments %>%
+  group_by(USERID) %>%
+  summarise(N_DISTINCT_ASSESSMENTDATE = n_distinct(EVENTDATE), .groups = "drop")
+
+distinct_dates_summary <- distinct_dates_per_user %>%
+  summarise(
+    MIN_DISTINCT_DATES     = min(N_DISTINCT_ASSESSMENTDATE, na.rm = TRUE),
+    MAX_DISTINCT_DATES     = max(N_DISTINCT_ASSESSMENTDATE, na.rm = TRUE),
+    AVERAGE_DISTINCT_DATES = round(mean(N_DISTINCT_ASSESSMENTDATE, na.rm = TRUE), 2)
+  )
+
+print(distinct_dates_summary)
 
 ```
 

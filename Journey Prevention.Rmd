@@ -1298,8 +1298,10 @@ write.csv(daily_cases_rolling_min, "G:/My Drive/Inzights/Journey/July 2026 Longi
 
 ```
 
-``` {r Comp_DF_Out}
+``` {r dfs_Out}
 
 write.csv(Comp_DF, "G:/My Drive/Inzights/Journey/July 2026 Longitudinal/Comp_DF.csv", row.names = FALSE)
+
+write.csv(Monthly_Assessments, "G:/My Drive/Inzights/Journey/July 2026 Longitudinal/Monthlies.csv", row.names = FALSE)
 
 ```

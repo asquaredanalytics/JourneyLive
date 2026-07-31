@@ -29,6 +29,9 @@ library(lubridate)
 library(gtsummary)
 library(gt)
 library(webshot2)
+library(knitr)
+
+Monthly_Assessments <- read.csv("G:/My Drive/Inzights/Journey/July 2026 Longitudinal/Monthly Assessments.csv")
 
 daily_cases <- read.csv("G:/My Drive/Inzights/Journey/July 2026 Longitudinal/daily_cases_startline.csv")
 
@@ -37,64 +40,64 @@ daily_cases_low_feeling <- read.csv("G:/My Drive/Inzights/Journey/July 2026 Long
 daily_cases_rolling_min <- read.csv("G:/My Drive/Inzights/Journey/July 2026 Longitudinal/daily_cases_rolling_min.csv")
 
 Comp_DF <- read.csv("G:/My Drive/Inzights/Journey/July 2026 Longitudinal/Comp_DF.csv")
-
-six_month_outcomes <- read.csv("G:/My Drive/Inzights/Journey/July 2026 Longitudinal/six_month_outcomes.csv")
+# 
+# six_month_outcomes <- read.csv("G:/My Drive/Inzights/Journey/July 2026 Longitudinal/six_month_outcomes.csv")
 
 ```
 
 ```{r case_count_analyses_monthly, results='asis'}
-
-crosstab_pairs <- list(
-  c("JOURNEY_INCREASE_1", "END_RISK_1"),
-  c("JOURNEY_INCREASE_3", "END_RISK_3"),
-  c("JOURNEY_INCREASE_6", "END_RISK_6"),
-  c("JOURNEY_INCREASE_1", "STRESSLEVEL_INCREASE_1"),
-  c("JOURNEY_INCREASE_3", "STRESSLEVEL_INCREASE_3"),
-  c("JOURNEY_INCREASE_6", "STRESSLEVEL_INCREASE_6"),
-  c("JOURNEY_INCREASE_1", "MANAGEFEELINGSLEVEL_INCREASE_1"),
-  c("JOURNEY_INCREASE_3", "MANAGEFEELINGSLEVEL_INCREASE_3"),
-  c("JOURNEY_INCREASE_6", "MANAGEFEELINGSLEVEL_INCREASE_6"),
-  c("JOURNEY_INCREASE_1", "FEELINGSFREQUENCY_INCREASE_1"),
-  c("JOURNEY_INCREASE_3", "FEELINGSFREQUENCY_INCREASE_3"),
-  c("JOURNEY_INCREASE_6", "FEELINGSFREQUENCY_INCREASE_6"),
-  c("JOURNEY_INCREASE_1", "DAYSEMOTIONALLYCHALLENGING_INCREASE_1"),
-  c("JOURNEY_INCREASE_3", "DAYSEMOTIONALLYCHALLENGING_INCREASE_3"),
-  c("JOURNEY_INCREASE_6", "DAYSEMOTIONALLYCHALLENGING_INCREASE_6"),
-  c("JOURNEY_INCREASE_1", "MANAGESTRESSLEVEL_INCREASE_1"),
-  c("JOURNEY_INCREASE_3", "MANAGESTRESSLEVEL_INCREASE_3"),
-  c("JOURNEY_INCREASE_6", "MANAGESTRESSLEVEL_INCREASE_6")
-)
-
-make_crosstab <- function(row_var, col_var, data = six_month_outcomes) {
-  filtered <- data %>%
-    filter(!is.na(.data[[row_var]]), !is.na(.data[[col_var]])) %>%
-    select(all_of(c(row_var, col_var)))
-
-  if (nrow(filtered) == 0) {
-    return(NULL)  # dropped the message() call — see note below
-  }
-
-  filtered %>%
-    tbl_cross(
-      row     = all_of(row_var),
-      col     = all_of(col_var),
-      percent = "row",
-      digits  = c(0, 1),
-      missing = "no"
-    ) %>%
-    bold_labels() %>%
-    modify_caption(paste0("**", row_var, " x ", col_var, "**"))
-}
-
-crosstab_names <- sapply(crosstab_pairs, paste, collapse = "_vs_")
-crosstab_list  <- lapply(crosstab_pairs, function(p) make_crosstab(p[1], p[2]))
-names(crosstab_list) <- crosstab_names
-crosstab_list <- Filter(Negate(is.null), crosstab_list)
-
-for (tbl in crosstab_list) {
-  print(tbl)
-  cat("\n\n")  # forces a clean break between tables in HTML output
-}
+# 
+# crosstab_pairs <- list(
+#   c("JOURNEY_INCREASE_1", "END_RISK_1"),
+#   c("JOURNEY_INCREASE_3", "END_RISK_3"),
+#   c("JOURNEY_INCREASE_6", "END_RISK_6"),
+#   c("JOURNEY_INCREASE_1", "STRESSLEVEL_INCREASE_1"),
+#   c("JOURNEY_INCREASE_3", "STRESSLEVEL_INCREASE_3"),
+#   c("JOURNEY_INCREASE_6", "STRESSLEVEL_INCREASE_6"),
+#   c("JOURNEY_INCREASE_1", "MANAGEFEELINGSLEVEL_INCREASE_1"),
+#   c("JOURNEY_INCREASE_3", "MANAGEFEELINGSLEVEL_INCREASE_3"),
+#   c("JOURNEY_INCREASE_6", "MANAGEFEELINGSLEVEL_INCREASE_6"),
+#   c("JOURNEY_INCREASE_1", "FEELINGSFREQUENCY_INCREASE_1"),
+#   c("JOURNEY_INCREASE_3", "FEELINGSFREQUENCY_INCREASE_3"),
+#   c("JOURNEY_INCREASE_6", "FEELINGSFREQUENCY_INCREASE_6"),
+#   c("JOURNEY_INCREASE_1", "DAYSEMOTIONALLYCHALLENGING_INCREASE_1"),
+#   c("JOURNEY_INCREASE_3", "DAYSEMOTIONALLYCHALLENGING_INCREASE_3"),
+#   c("JOURNEY_INCREASE_6", "DAYSEMOTIONALLYCHALLENGING_INCREASE_6"),
+#   c("JOURNEY_INCREASE_1", "MANAGESTRESSLEVEL_INCREASE_1"),
+#   c("JOURNEY_INCREASE_3", "MANAGESTRESSLEVEL_INCREASE_3"),
+#   c("JOURNEY_INCREASE_6", "MANAGESTRESSLEVEL_INCREASE_6")
+# )
+# 
+# make_crosstab <- function(row_var, col_var, data = six_month_outcomes) {
+#   filtered <- data %>%
+#     filter(!is.na(.data[[row_var]]), !is.na(.data[[col_var]])) %>%
+#     select(all_of(c(row_var, col_var)))
+# 
+#   if (nrow(filtered) == 0) {
+#     return(NULL)  # dropped the message() call — see note below
+#   }
+# 
+#   filtered %>%
+#     tbl_cross(
+#       row     = all_of(row_var),
+#       col     = all_of(col_var),
+#       percent = "row",
+#       digits  = c(0, 1),
+#       missing = "no"
+#     ) %>%
+#     bold_labels() %>%
+#     modify_caption(paste0("**", row_var, " x ", col_var, "**"))
+# }
+# 
+# crosstab_names <- sapply(crosstab_pairs, paste, collapse = "_vs_")
+# crosstab_list  <- lapply(crosstab_pairs, function(p) make_crosstab(p[1], p[2]))
+# names(crosstab_list) <- crosstab_names
+# crosstab_list <- Filter(Negate(is.null), crosstab_list)
+# 
+# for (tbl in crosstab_list) {
+#   print(tbl)
+#   cat("\n\n")  # forces a clean break between tables in HTML output
+# }
 
 ```
 
@@ -535,6 +538,12 @@ rownames(Low_Mood_Cors_DF) <- NULL
 
 Low_Mood_Cors_DF <- Low_Mood_Cors_DF[which(grepl("MEAN_", Low_Mood_Cors_DF$Outcome) & grepl("SUM_", Low_Mood_Cors_DF$Predictor) & Low_Mood_Cors_DF$P_Value < .1),]
 
+Low_Mood_Cors_DF <- Low_Mood_Cors_DF %>%
+  select(Outcome, Predictor, everything()) %>%
+  arrange(Outcome, desc(Correlation))
+
+kable(Low_Mood_Cors_DF)
+
 ```
 
 # Rolling Min Mood and Usage Correlations
@@ -571,6 +580,8 @@ rolling_min_cors_DF <- rolling_min_cors_DF[which(grepl("MEAN_", rolling_min_cors
 rolling_min_cors_DF <- rolling_min_cors_DF %>%
   select(Outcome, Predictor, everything()) %>%
   arrange(Outcome, desc(Correlation))
+
+kable(rolling_min_cors_DF)
 
 ```
 
@@ -612,3 +623,30 @@ Comp_DF %>%
   select(N_DISTINCT_VALUES, N_USERIDS, PCT_USERIDS, AVG_TOTAL_RESPONSES)
 
 ```
+
+``` {r Low_Mood_Participant_Monthly_Answers}
+
+# Look at “bad and OK” users included in that analysis and show how are they scoring on the other monthly measures (avg and range)
+# How many times did they answer monthly?
+
+Low_Mood_Monthly_Assessments <- Monthly_Assessments %>%
+  filter(USERID %in% daily_cases_low_feeling$USERID)
+
+measure_cols <- c("STRESSLEVEL", "MANAGESTRESSLEVEL", "MANAGEFEELINGSLEVEL",
+                   "FEELINGSFREQUENCY", "DAYSEMOTIONALLYCHALLENGING")
+
+measure_summary <- Low_Mood_Monthly_Assessments %>%
+  summarise(across(
+    all_of(measure_cols),
+    list(
+      MIN     = ~ suppressWarnings(min(.x, na.rm = TRUE)),
+      MAX     = ~ suppressWarnings(max(.x, na.rm = TRUE)),
+      AVERAGE = ~ round(mean(.x, na.rm = TRUE), 2)
+    ),
+    .names = "{.col}_{.fn}"
+  ))
+
+measure_summary
+
+```
+

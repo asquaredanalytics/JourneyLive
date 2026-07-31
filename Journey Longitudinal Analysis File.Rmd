@@ -343,40 +343,27 @@ crosstab_6_low <- daily_cases_low_feeling %>%
 
 crosstab_6_low
 
-# print_range_avg <- function(data, col_name, label) {
-#   vals <- data[[col_name]]
-#   vals <- vals[!is.na(vals)]
-#   if (length(vals) == 0) {
-#     cat(label, ": no valid data\n")
-#     return(invisible(NULL))
-#   }
-#   cat(sprintf("%-55s Range: %6s to %-6s | Average: %s\n",
-#               label, round(min(vals), 2), round(max(vals), 2), round(mean(vals), 2)))
-# }
-# 
-# window_suffixes <- c("1WK", "2WK", "1", "3", "6")
-# 
-# for (s in window_suffixes) {
-#   print_range_avg(daily_cases_low_feeling, paste0("SUM_COMP_JOURNEY_USE_D_BEFORE_", s),
-#                    paste0("Comp Journey Use (Sum) -- BEFORE ", s))
-#   print_range_avg(daily_cases_low_feeling, paste0("SUM_COMP_JOURNEY_USE_D_AFTER_", s),
-#                    paste0("Comp Journey Use (Sum) -- AFTER ", s))
-#   print_range_avg(daily_cases_low_feeling, paste0("COUNT_FEELING1_BEFORE_", s),
-#                    paste0("# Times FEELINGRATING = 1 -- BEFORE ", s))
-#   print_range_avg(daily_cases_low_feeling, paste0("COUNT_FEELING1_AFTER_", s),
-#                    paste0("# Times FEELINGRATING = 1 -- AFTER ", s))
-# }
-# 
-# for (s in window_suffixes) {
-#   print_range_avg(daily_cases_low_feeling, paste0("SUM_COMP_JOURNEY_USE_D_BEFORE_", s),
-#                    paste0("Comp Journey Use (Sum) -- BEFORE ", s))
-#   print_range_avg(daily_cases_low_feeling, paste0("SUM_COMP_JOURNEY_USE_D_AFTER_", s),
-#                    paste0("Comp Journey Use (Sum) -- AFTER ", s))
-#   print_range_avg(daily_cases_low_feeling, paste0("COUNT_FEELING2_BEFORE_", s),
-#                    paste0("# Times FEELINGRATING = 2 -- BEFORE ", s))
-#   print_range_avg(daily_cases_low_feeling, paste0("COUNT_FEELING2_AFTER_", s),
-#                    paste0("# Times FEELINGRATING = 2 -- AFTER ", s))
-# }
+print_range_avg <- function(data, col_name, label) {
+   vals <- data[[col_name]]
+   vals <- vals[!is.na(vals)]
+   if (length(vals) == 0) {
+     cat(label, ": no valid data\n")
+     return(invisible(NULL))
+   }
+   cat(sprintf("%-55s Range: %6s to %-6s | Average: %s\n",
+               label, round(min(vals), 2), round(max(vals), 2), round(mean(vals), 2)))
+ }
+ 
+for (s in window_suffixes) {
+   print_range_avg(daily_cases_low_feeling, paste0("SUM_COMP_JOURNEY_USE_D_BEFORE_", s),
+                    paste0("Comp Journey Use (Sum) -- BEFORE ", s))
+   print_range_avg(daily_cases_low_feeling, paste0("SUM_COMP_JOURNEY_USE_D_AFTER_", s),
+                    paste0("Comp Journey Use (Sum) -- AFTER ", s))
+   print_range_avg(daily_cases_low_feeling, paste0("COUNT_FEELING2_BEFORE_", s),
+                    paste0("# Times FEELINGRATING = 2 -- BEFORE ", s))
+   print_range_avg(daily_cases_low_feeling, paste0("COUNT_FEELING2_AFTER_", s),
+                    paste0("# Times FEELINGRATING = 2 -- AFTER ", s))
+ }
 
 ```
 
@@ -586,80 +573,120 @@ kable(Low_Mood_Cors_DF)
 ```
 
 ```{r Daily_Mood_Rating_Descriptives}
-# 
-# Comp_DF %>%
-#   filter(!is.na(FEELINGRATING)) %>%
-#   distinct(USERID, FEELINGRATING) %>%
-#   count(FEELINGRATING, name = "N_USERIDS") %>%
-#   mutate(PCT_USERIDS = round(100 * N_USERIDS / n_distinct(Comp_DF$USERID), 1))
-# 
-# # How many different ratings do most users report
-# 
-# Comp_DF %>%
-#   filter(!is.na(FEELINGRATING)) %>%
-#   distinct(USERID, FEELINGRATING) %>%
-#   count(USERID, name = "N_DISTINCT_VALUES") %>%
-#   summarise(
-#     AVG_DISTINCT_VALUES    = mean(N_DISTINCT_VALUES),
-#     MEDIAN_DISTINCT_VALUES = median(N_DISTINCT_VALUES)
-#   )
-# 
-# Comp_DF %>%
-#   filter(!is.na(FEELINGRATING)) %>%
-#   group_by(USERID) %>%
-#   summarise(
-#     N_DISTINCT_VALUES  = n_distinct(FEELINGRATING),  # distinct FEELINGRATING values reported
-#     N_TOTAL_RESPONSES  = n(),                        # total FEELINGRATING responses (all rows, incl. repeats)
-#     .groups = "drop"
-#   ) %>%
-#   group_by(N_DISTINCT_VALUES) %>%
-#   summarise(
-#     N_USERIDS            = n(),
-#     AVG_TOTAL_RESPONSES  = round(mean(N_TOTAL_RESPONSES), 1),
-#     .groups = "drop"
-#   ) %>%
-#   mutate(PCT_USERIDS = round(100 * N_USERIDS / sum(N_USERIDS), 1)) %>%
-#   arrange(N_DISTINCT_VALUES) %>%
-#   select(N_DISTINCT_VALUES, N_USERIDS, PCT_USERIDS, AVG_TOTAL_RESPONSES)
+ 
+ Comp_DF %>%
+   filter(!is.na(FEELINGRATING)) %>%
+   distinct(USERID, FEELINGRATING) %>%
+   count(FEELINGRATING, name = "N_USERIDS") %>%
+   mutate(PCT_USERIDS = round(100 * N_USERIDS / n_distinct(Comp_DF$USERID), 1))
+ 
+# How many different ratings do most users report
+ 
+ Comp_DF %>%
+   filter(!is.na(FEELINGRATING)) %>%
+   distinct(USERID, FEELINGRATING) %>%
+   count(USERID, name = "N_DISTINCT_VALUES") %>%
+   summarise(
+     AVG_DISTINCT_VALUES    = mean(N_DISTINCT_VALUES),
+     MEDIAN_DISTINCT_VALUES = median(N_DISTINCT_VALUES)
+   )
+ 
+ Comp_DF %>%
+   filter(!is.na(FEELINGRATING)) %>%
+   group_by(USERID) %>%
+   summarise(
+     N_DISTINCT_VALUES  = n_distinct(FEELINGRATING), #  distinct FEELINGRATING values reported
+     N_TOTAL_RESPONSES  = n(),                       #  total FEELINGRATING responses (all rows, incl. repeats)
+     .groups = "drop"
+   ) %>%
+   group_by(N_DISTINCT_VALUES) %>%
+   summarise(
+     N_USERIDS            = n(),
+     AVG_TOTAL_RESPONSES  = round(mean(N_TOTAL_RESPONSES), 1),
+     .groups = "drop"
+   ) %>%
+   mutate(PCT_USERIDS = round(100 * N_USERIDS / sum(N_USERIDS), 1)) %>%
+   arrange(N_DISTINCT_VALUES) %>%
+   select(N_DISTINCT_VALUES, N_USERIDS, PCT_USERIDS, AVG_TOTAL_RESPONSES)
 
 ```
 
 ``` {r Low_Mood_Participant_Monthly_Answers}
-# 
-# # Look at “bad and OK” users included in that analysis and show how are they scoring on the other monthly measures (avg and range)
-# # How many times did they answer monthly?
-# 
-# Low_Mood_Monthly_Assessments <- Monthly_Assessments %>%
-#   filter(USERID %in% daily_cases_low_feeling$USERID)
-# 
-# measure_cols <- c("STRESSLEVEL", "MANAGESTRESSLEVEL", "MANAGEFEELINGSLEVEL",
-#                    "FEELINGSFREQUENCY", "DAYSEMOTIONALLYCHALLENGING")
-# 
-# measure_summary <- Low_Mood_Monthly_Assessments %>%
-#   summarise(across(
-#     all_of(measure_cols),
-#     list(
-#       MIN     = ~ suppressWarnings(min(.x, na.rm = TRUE)),
-#       MAX     = ~ suppressWarnings(max(.x, na.rm = TRUE)),
-#       AVERAGE = ~ round(mean(.x, na.rm = TRUE), 2)
-#     ),
-#     .names = "{.col}_{.fn}"
-#   ))
-# 
-# print(measure_summary)
-# 
-# distinct_dates_per_user <- Low_Mood_Monthly_Assessments %>%
-#   group_by(USERID) %>%
-#   summarise(N_DISTINCT_ASSESSMENTDATE = n_distinct(EVENTDATE), .groups = "drop")
-# 
-# distinct_dates_summary <- distinct_dates_per_user %>%
-#   summarise(
-#     MIN_DISTINCT_DATES     = min(N_DISTINCT_ASSESSMENTDATE, na.rm = TRUE),
-#     MAX_DISTINCT_DATES     = max(N_DISTINCT_ASSESSMENTDATE, na.rm = TRUE),
-#     AVERAGE_DISTINCT_DATES = round(mean(N_DISTINCT_ASSESSMENTDATE, na.rm = TRUE), 2)
-#   )
-# 
-# print(distinct_dates_summary)
+ 
+# Look at “bad and OK” users included in that analysis and show how are they scoring on the other monthly measures (avg and range)
+# How many times did they answer monthly?
+ 
+ Low_Mood_Monthly_Assessments <- Monthly_Assessments %>%
+   filter(USERID %in% daily_cases_low_feeling$USERID)
+ 
+ measure_cols <- c("STRESSLEVEL", "MANAGESTRESSLEVEL", "MANAGEFEELINGSLEVEL",
+                    "FEELINGSFREQUENCY", "DAYSEMOTIONALLYCHALLENGING")
+ 
+ measure_summary <- Low_Mood_Monthly_Assessments %>%
+   summarise(across(
+     all_of(measure_cols),
+     list(
+       MIN     = ~ suppressWarnings(min(.x, na.rm = TRUE)),
+       MAX     = ~ suppressWarnings(max(.x, na.rm = TRUE)),
+       AVERAGE = ~ round(mean(.x, na.rm = TRUE), 2)
+     ),
+     .names = "{.col}_{.fn}"
+   ))
+ 
+ print(measure_summary)
+ 
+ distinct_dates_per_user <- Low_Mood_Monthly_Assessments %>%
+   group_by(USERID) %>%
+   summarise(N_DISTINCT_ASSESSMENTDATE = n_distinct(EVENTDATE), .groups = "drop")
+ 
+ distinct_dates_summary <- distinct_dates_per_user %>%
+   summarise(
+     MIN_DISTINCT_DATES     = min(N_DISTINCT_ASSESSMENTDATE, na.rm = TRUE),
+     MAX_DISTINCT_DATES     = max(N_DISTINCT_ASSESSMENTDATE, na.rm = TRUE),
+     AVERAGE_DISTINCT_DATES = round(mean(N_DISTINCT_ASSESSMENTDATE, na.rm = TRUE), 2)
+   )
+ 
+ print(distinct_dates_summary)
 
 ```
 
+
+
+``` {r High_Mood_Participant_Monthly_Answers}
+ 
+# Look at “bad and OK” users included in that analysis and show how are they scoring on the other monthly measures (avg and range)
+# How many times did they answer monthly?
+ 
+ High_Mood_Monthly_Assessments <- Monthly_Assessments %>%
+   filter(!(USERID %in% daily_cases_low_feeling$USERID))
+ 
+ measure_cols <- c("STRESSLEVEL", "MANAGESTRESSLEVEL", "MANAGEFEELINGSLEVEL",
+                    "FEELINGSFREQUENCY", "DAYSEMOTIONALLYCHALLENGING")
+ 
+ measure_summary <- High_Mood_Monthly_Assessments %>%
+   summarise(across(
+     all_of(measure_cols),
+     list(
+       MIN     = ~ suppressWarnings(min(.x, na.rm = TRUE)),
+       MAX     = ~ suppressWarnings(max(.x, na.rm = TRUE)),
+       AVERAGE = ~ round(mean(.x, na.rm = TRUE), 2)
+     ),
+     .names = "{.col}_{.fn}"
+   ))
+ 
+ print(measure_summary)
+ 
+ distinct_dates_per_user <- High_Mood_Monthly_Assessments %>%
+   group_by(USERID) %>%
+   summarise(N_DISTINCT_ASSESSMENTDATE = n_distinct(EVENTDATE), .groups = "drop")
+ 
+ distinct_dates_summary <- distinct_dates_per_user %>%
+   summarise(
+     MIN_DISTINCT_DATES     = min(N_DISTINCT_ASSESSMENTDATE, na.rm = TRUE),
+     MAX_DISTINCT_DATES     = max(N_DISTINCT_ASSESSMENTDATE, na.rm = TRUE),
+     AVERAGE_DISTINCT_DATES = round(mean(N_DISTINCT_ASSESSMENTDATE, na.rm = TRUE), 2)
+   )
+ 
+ print(distinct_dates_summary)
+
+```

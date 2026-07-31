@@ -99,7 +99,7 @@ Platform_Events <- Platform_Events %>%
 
 Monthly_Assessments$DAYSEMOTIONALLYCHALLENGING <- ifelse(Monthly_Assessments$DAYSEMOTIONALLYCHALLENGING < 0 | Monthly_Assessments$DAYSEMOTIONALLYCHALLENGING > 31, NA, Monthly_Assessments$DAYSEMOTIONALLYCHALLENGING)
 
-Daily_Checks$FEELINGRATING <- ifelse(Daily_Checks$FEELINGRATING == 0 | Daily_Checks$FEELINGRATING > 5, NA, Daily_Checks$FEELINGRATING)
+Daily_Checks$FEELINGRATING <- ifelse(Daily_Checks$FEELINGRATING < 2 | Daily_Checks$FEELINGRATING > 5, NA, Daily_Checks$FEELINGRATING)
 
 ```
 
@@ -140,7 +140,7 @@ Comp_DF$EVENTDATE <- as.Date(Comp_DF$EVENTDATE)
 
 ``` {r coding_indicator_variables}
 
-Comp_DF$BAD_DAY_RISK <- ifelse(Comp_DF$FEELINGRATING == 1, 1, 0)
+Comp_DF$BAD_DAY_RISK <- ifelse(Comp_DF$FEELINGRATING == 2, 1, 0)
 
 Comp_DF$STRESS_RISK <- ifelse(Comp_DF$STRESSLEVEL > 5, 1, 0)
 
@@ -887,7 +887,7 @@ daily_cases_low_feeling <- Comp_DF
 daily_cases_low_feeling$EVENTDATE <- as.Date(daily_cases_low_feeling$EVENTDATE, format = "%Y-%m-%d")
 
 qualifying_userids <- daily_cases_low_feeling %>%
-  filter(!is.na(FEELINGRATING), FEELINGRATING %in% c(1, 2)) %>%
+  filter(!is.na(FEELINGRATING), FEELINGRATING == 2) %>%
   distinct(USERID) %>%
   pull(USERID)
 
@@ -898,7 +898,7 @@ daily_cases_low_feeling <- daily_cases_low_feeling %>%
 #         is 1 or 2 (this replaces "first EVENTDATE overall" as the
 #         BEFORE-window start) --------------------------------------------
 baseline_dates <- daily_cases_low_feeling %>%
-  filter(!is.na(FEELINGRATING), FEELINGRATING %in% c(1, 2)) %>%
+  filter(!is.na(FEELINGRATING), FEELINGRATING == 2) %>%
   group_by(USERID) %>%
   summarise(BASELINE_DATE = min(EVENTDATE, na.rm = TRUE), .groups = "drop")
 
@@ -932,10 +932,6 @@ build_before_after <- function(data, baseline_dates, add_period, suffix) {
         Comp_JOURNEY_USE_D[EVENTDATE >= BASELINE_DATE & EVENTDATE < .before_end],
         na.rm = TRUE
       ),
-      COUNT_FEELING1_BEFORE = sum(
-        FEELINGRATING[EVENTDATE >= BASELINE_DATE & EVENTDATE < .before_end] == 1,
-        na.rm = TRUE
-      ),
       COUNT_FEELING2_BEFORE = sum(
         FEELINGRATING[EVENTDATE >= BASELINE_DATE & EVENTDATE < .before_end] == 2,
         na.rm = TRUE
@@ -958,10 +954,6 @@ build_before_after <- function(data, baseline_dates, add_period, suffix) {
       SUM_COMP_JOURNEY_USE_D_AFTER = ifelse(
         is.na(.after_start), NA_real_,
         sum(Comp_JOURNEY_USE_D[EVENTDATE >= .after_start & EVENTDATE < .after_end], na.rm = TRUE)
-      ),
-      COUNT_FEELING1_AFTER = ifelse(
-        is.na(.after_start), NA_real_,
-        sum(FEELINGRATING[EVENTDATE >= .after_start & EVENTDATE < .after_end] == 1, na.rm = TRUE)
       ),
       COUNT_FEELING2_AFTER = ifelse(
         is.na(.after_start), NA_real_,

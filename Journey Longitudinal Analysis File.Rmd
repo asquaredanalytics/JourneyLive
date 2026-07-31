@@ -104,116 +104,116 @@ Comp_DF <- read.csv("G:/My Drive/Inzights/Journey/July 2026 Longitudinal/Comp_DF
 # Daily Case Counts Plots - Startline
 
 ```{r Daily_Case_Count_Plot_Startline}
-
-# ---------------------------------------------------------------------
-# Crosstab: JOURNEY_INCREASE_1WK x MEAN_FEELINGRATING_CHANGE_1WK
-# ---------------------------------------------------------------------
-crosstab_1wk <- daily_cases %>%
-  filter(!is.na(JOURNEY_INCREASE_1WK), !is.na(MEAN_FEELINGRATING_CHANGE_1WK)) %>%
-  select(JOURNEY_INCREASE_1WK, MEAN_FEELINGRATING_CHANGE_1WK) %>%
-  tbl_cross(
-    row     = JOURNEY_INCREASE_1WK,
-    col     = MEAN_FEELINGRATING_CHANGE_1WK,
-    percent = "row",     # cell percentages (of the table total)
-    digits  = c(0, 1),   # 0 decimals for N, 1 decimal for %
-    missing = "no",      # safety net: don't add a "missing" row/col
-    label   = list(      # <-- customize row/col display labels here
-      JOURNEY_INCREASE_1WK          ~ "Journey Use Increased?",
-      MEAN_FEELINGRATING_CHANGE_1WK ~ "Mood Change"
-    )
-  ) %>%
-  bold_labels() %>%
-  modify_caption("**Did Journey Use and Mood Change Over the Last Week?**")  # <-- customize title here
-
-crosstab_1wk
-
-# ---------------------------------------------------------------------
-# Crosstab: JOURNEY_INCREASE_2WK x MEAN_FEELINGRATING_CHANGE_2WK
-# ---------------------------------------------------------------------
-crosstab_2wk <- daily_cases %>%
-  filter(!is.na(JOURNEY_INCREASE_2WK), !is.na(MEAN_FEELINGRATING_CHANGE_2WK)) %>%
-  select(JOURNEY_INCREASE_2WK, MEAN_FEELINGRATING_CHANGE_2WK) %>%
-  tbl_cross(
-    row     = JOURNEY_INCREASE_2WK,
-    col     = MEAN_FEELINGRATING_CHANGE_2WK,
-    percent = "row",
-    digits  = c(0, 1),
-    missing = "no",
-    label   = list(      # <-- customize row/col display labels here
-      JOURNEY_INCREASE_2WK          ~ "Journey Use Increased?",
-      MEAN_FEELINGRATING_CHANGE_2WK ~ "Mood Change"
-    )
-  ) %>%
-  bold_labels() %>%
-  modify_caption("**Did Journey Use and Mood Change Over the Last 2 Weeks?**")  # <-- customize title here
-
-crosstab_2wk
-
-# ---------------------------------------------------------------------
-# Crosstab: JOURNEY_INCREASE_1 x MEAN_FEELINGRATING_CHANGE_1
-# ---------------------------------------------------------------------
-crosstab_1 <- daily_cases %>%
-  filter(!is.na(JOURNEY_INCREASE_1), !is.na(MEAN_FEELINGRATING_CHANGE_1)) %>%
-  select(JOURNEY_INCREASE_1, MEAN_FEELINGRATING_CHANGE_1) %>%
-  tbl_cross(
-    row     = JOURNEY_INCREASE_1,
-    col     = MEAN_FEELINGRATING_CHANGE_1,
-    percent = "row",     # cell percentages (of the table total)
-    digits  = c(0, 1),   # 0 decimals for N, 1 decimal for %
-    missing = "no",      # safety net: don't add a "missing" row/col
-    label   = list(      # <-- customize row/col display labels here
-      JOURNEY_INCREASE_1          ~ "Journey Use Increased?",
-      MEAN_FEELINGRATING_CHANGE_1 ~ "Mood Change"
-    )
-  ) %>%
-  bold_labels() %>%
-  modify_caption("**Did Journey Use and Mood Change Over the Last Month?**")  # <-- customize title here
-
-crosstab_1
-
-# ---------------------------------------------------------------------
-# Crosstab: JOURNEY_INCREASE_3 x MEAN_FEELINGRATING_CHANGE_3
-# ---------------------------------------------------------------------
-crosstab_3 <- daily_cases %>%
-  filter(!is.na(JOURNEY_INCREASE_3), !is.na(MEAN_FEELINGRATING_CHANGE_3)) %>%
-  select(JOURNEY_INCREASE_3, MEAN_FEELINGRATING_CHANGE_3) %>%
-  tbl_cross(
-    row     = JOURNEY_INCREASE_3,
-    col     = MEAN_FEELINGRATING_CHANGE_3,
-    percent = "row",
-    digits  = c(0, 1),
-    missing = "no",
-    label   = list(      # <-- customize row/col display labels here
-      JOURNEY_INCREASE_3          ~ "Journey Use Increased?",
-      MEAN_FEELINGRATING_CHANGE_3 ~ "Mood Change"
-    )
-  ) %>%
-  bold_labels() %>%
-  modify_caption("**Did Journey Use and Mood Change Over the Last 3 Months?**")  # <-- customize title here
-
-crosstab_3
-
-# ---------------------------------------------------------------------
-# Crosstab: JOURNEY_INCREASE_6 x MEAN_FEELINGRATING_CHANGE_6
-# ---------------------------------------------------------------------
-crosstab_6 <- daily_cases %>%
-  filter(!is.na(JOURNEY_INCREASE_6), !is.na(MEAN_FEELINGRATING_CHANGE_6)) %>%
-  select(JOURNEY_INCREASE_6, MEAN_FEELINGRATING_CHANGE_6) %>%
-  tbl_cross(
-    row     = JOURNEY_INCREASE_6,
-    col     = MEAN_FEELINGRATING_CHANGE_6,
-    percent = "row",
-    digits  = c(0, 1),
-    missing = "no",
-    label   = list(      # <-- customize row/col display labels here
-      JOURNEY_INCREASE_6          ~ "Journey Use Increased?",
-      MEAN_FEELINGRATING_CHANGE_6 ~ "Mood Change"
-    )
-  ) %>%
-  bold_labels() %>%
-  modify_caption("**Did Journey Use and Mood Change Over the Last 6 Months?**")  # <-- customize title here
-
-crosstab_6
+# 
+# # ---------------------------------------------------------------------
+# # Crosstab: JOURNEY_INCREASE_1WK x MEAN_FEELINGRATING_CHANGE_1WK
+# # ---------------------------------------------------------------------
+# crosstab_1wk <- daily_cases %>%
+#   filter(!is.na(JOURNEY_INCREASE_1WK), !is.na(MEAN_FEELINGRATING_CHANGE_1WK)) %>%
+#   select(JOURNEY_INCREASE_1WK, MEAN_FEELINGRATING_CHANGE_1WK) %>%
+#   tbl_cross(
+#     row     = JOURNEY_INCREASE_1WK,
+#     col     = MEAN_FEELINGRATING_CHANGE_1WK,
+#     percent = "row",     # cell percentages (of the table total)
+#     digits  = c(0, 1),   # 0 decimals for N, 1 decimal for %
+#     missing = "no",      # safety net: don't add a "missing" row/col
+#     label   = list(      # <-- customize row/col display labels here
+#       JOURNEY_INCREASE_1WK          ~ "Journey Use Increased?",
+#       MEAN_FEELINGRATING_CHANGE_1WK ~ "Mood Change"
+#     )
+#   ) %>%
+#   bold_labels() %>%
+#   modify_caption("**Did Journey Use and Mood Change Over the Last Week?**")  # <-- customize title here
+# 
+# crosstab_1wk
+# 
+# # ---------------------------------------------------------------------
+# # Crosstab: JOURNEY_INCREASE_2WK x MEAN_FEELINGRATING_CHANGE_2WK
+# # ---------------------------------------------------------------------
+# crosstab_2wk <- daily_cases %>%
+#   filter(!is.na(JOURNEY_INCREASE_2WK), !is.na(MEAN_FEELINGRATING_CHANGE_2WK)) %>%
+#   select(JOURNEY_INCREASE_2WK, MEAN_FEELINGRATING_CHANGE_2WK) %>%
+#   tbl_cross(
+#     row     = JOURNEY_INCREASE_2WK,
+#     col     = MEAN_FEELINGRATING_CHANGE_2WK,
+#     percent = "row",
+#     digits  = c(0, 1),
+#     missing = "no",
+#     label   = list(      # <-- customize row/col display labels here
+#       JOURNEY_INCREASE_2WK          ~ "Journey Use Increased?",
+#       MEAN_FEELINGRATING_CHANGE_2WK ~ "Mood Change"
+#     )
+#   ) %>%
+#   bold_labels() %>%
+#   modify_caption("**Did Journey Use and Mood Change Over the Last 2 Weeks?**")  # <-- customize title here
+# 
+# crosstab_2wk
+# 
+# # ---------------------------------------------------------------------
+# # Crosstab: JOURNEY_INCREASE_1 x MEAN_FEELINGRATING_CHANGE_1
+# # ---------------------------------------------------------------------
+# crosstab_1 <- daily_cases %>%
+#   filter(!is.na(JOURNEY_INCREASE_1), !is.na(MEAN_FEELINGRATING_CHANGE_1)) %>%
+#   select(JOURNEY_INCREASE_1, MEAN_FEELINGRATING_CHANGE_1) %>%
+#   tbl_cross(
+#     row     = JOURNEY_INCREASE_1,
+#     col     = MEAN_FEELINGRATING_CHANGE_1,
+#     percent = "row",     # cell percentages (of the table total)
+#     digits  = c(0, 1),   # 0 decimals for N, 1 decimal for %
+#     missing = "no",      # safety net: don't add a "missing" row/col
+#     label   = list(      # <-- customize row/col display labels here
+#       JOURNEY_INCREASE_1          ~ "Journey Use Increased?",
+#       MEAN_FEELINGRATING_CHANGE_1 ~ "Mood Change"
+#     )
+#   ) %>%
+#   bold_labels() %>%
+#   modify_caption("**Did Journey Use and Mood Change Over the Last Month?**")  # <-- customize title here
+# 
+# crosstab_1
+# 
+# # ---------------------------------------------------------------------
+# # Crosstab: JOURNEY_INCREASE_3 x MEAN_FEELINGRATING_CHANGE_3
+# # ---------------------------------------------------------------------
+# crosstab_3 <- daily_cases %>%
+#   filter(!is.na(JOURNEY_INCREASE_3), !is.na(MEAN_FEELINGRATING_CHANGE_3)) %>%
+#   select(JOURNEY_INCREASE_3, MEAN_FEELINGRATING_CHANGE_3) %>%
+#   tbl_cross(
+#     row     = JOURNEY_INCREASE_3,
+#     col     = MEAN_FEELINGRATING_CHANGE_3,
+#     percent = "row",
+#     digits  = c(0, 1),
+#     missing = "no",
+#     label   = list(      # <-- customize row/col display labels here
+#       JOURNEY_INCREASE_3          ~ "Journey Use Increased?",
+#       MEAN_FEELINGRATING_CHANGE_3 ~ "Mood Change"
+#     )
+#   ) %>%
+#   bold_labels() %>%
+#   modify_caption("**Did Journey Use and Mood Change Over the Last 3 Months?**")  # <-- customize title here
+# 
+# crosstab_3
+# 
+# # ---------------------------------------------------------------------
+# # Crosstab: JOURNEY_INCREASE_6 x MEAN_FEELINGRATING_CHANGE_6
+# # ---------------------------------------------------------------------
+# crosstab_6 <- daily_cases %>%
+#   filter(!is.na(JOURNEY_INCREASE_6), !is.na(MEAN_FEELINGRATING_CHANGE_6)) %>%
+#   select(JOURNEY_INCREASE_6, MEAN_FEELINGRATING_CHANGE_6) %>%
+#   tbl_cross(
+#     row     = JOURNEY_INCREASE_6,
+#     col     = MEAN_FEELINGRATING_CHANGE_6,
+#     percent = "row",
+#     digits  = c(0, 1),
+#     missing = "no",
+#     label   = list(      # <-- customize row/col display labels here
+#       JOURNEY_INCREASE_6          ~ "Journey Use Increased?",
+#       MEAN_FEELINGRATING_CHANGE_6 ~ "Mood Change"
+#     )
+#   ) %>%
+#   bold_labels() %>%
+#   modify_caption("**Did Journey Use and Mood Change Over the Last 6 Months?**")  # <-- customize title here
+# 
+# crosstab_6
 
 ```
 
@@ -343,167 +343,167 @@ crosstab_6_low <- daily_cases_low_feeling %>%
 
 crosstab_6_low
 
-print_range_avg <- function(data, col_name, label) {
-  vals <- data[[col_name]]
-  vals <- vals[!is.na(vals)]
-  if (length(vals) == 0) {
-    cat(label, ": no valid data\n")
-    return(invisible(NULL))
-  }
-  cat(sprintf("%-55s Range: %6s to %-6s | Average: %s\n",
-              label, round(min(vals), 2), round(max(vals), 2), round(mean(vals), 2)))
-}
-
-window_suffixes <- c("1WK", "2WK", "1", "3", "6")
-
-for (s in window_suffixes) {
-  print_range_avg(daily_cases_low_feeling, paste0("SUM_COMP_JOURNEY_USE_D_BEFORE_", s),
-                   paste0("Comp Journey Use (Sum) -- BEFORE ", s))
-  print_range_avg(daily_cases_low_feeling, paste0("SUM_COMP_JOURNEY_USE_D_AFTER_", s),
-                   paste0("Comp Journey Use (Sum) -- AFTER ", s))
-  print_range_avg(daily_cases_low_feeling, paste0("COUNT_FEELING1_BEFORE_", s),
-                   paste0("# Times FEELINGRATING = 1 -- BEFORE ", s))
-  print_range_avg(daily_cases_low_feeling, paste0("COUNT_FEELING1_AFTER_", s),
-                   paste0("# Times FEELINGRATING = 1 -- AFTER ", s))
-}
-
-for (s in window_suffixes) {
-  print_range_avg(daily_cases_low_feeling, paste0("SUM_COMP_JOURNEY_USE_D_BEFORE_", s),
-                   paste0("Comp Journey Use (Sum) -- BEFORE ", s))
-  print_range_avg(daily_cases_low_feeling, paste0("SUM_COMP_JOURNEY_USE_D_AFTER_", s),
-                   paste0("Comp Journey Use (Sum) -- AFTER ", s))
-  print_range_avg(daily_cases_low_feeling, paste0("COUNT_FEELING2_BEFORE_", s),
-                   paste0("# Times FEELINGRATING = 2 -- BEFORE ", s))
-  print_range_avg(daily_cases_low_feeling, paste0("COUNT_FEELING2_AFTER_", s),
-                   paste0("# Times FEELINGRATING = 2 -- AFTER ", s))
-}
+# print_range_avg <- function(data, col_name, label) {
+#   vals <- data[[col_name]]
+#   vals <- vals[!is.na(vals)]
+#   if (length(vals) == 0) {
+#     cat(label, ": no valid data\n")
+#     return(invisible(NULL))
+#   }
+#   cat(sprintf("%-55s Range: %6s to %-6s | Average: %s\n",
+#               label, round(min(vals), 2), round(max(vals), 2), round(mean(vals), 2)))
+# }
+# 
+# window_suffixes <- c("1WK", "2WK", "1", "3", "6")
+# 
+# for (s in window_suffixes) {
+#   print_range_avg(daily_cases_low_feeling, paste0("SUM_COMP_JOURNEY_USE_D_BEFORE_", s),
+#                    paste0("Comp Journey Use (Sum) -- BEFORE ", s))
+#   print_range_avg(daily_cases_low_feeling, paste0("SUM_COMP_JOURNEY_USE_D_AFTER_", s),
+#                    paste0("Comp Journey Use (Sum) -- AFTER ", s))
+#   print_range_avg(daily_cases_low_feeling, paste0("COUNT_FEELING1_BEFORE_", s),
+#                    paste0("# Times FEELINGRATING = 1 -- BEFORE ", s))
+#   print_range_avg(daily_cases_low_feeling, paste0("COUNT_FEELING1_AFTER_", s),
+#                    paste0("# Times FEELINGRATING = 1 -- AFTER ", s))
+# }
+# 
+# for (s in window_suffixes) {
+#   print_range_avg(daily_cases_low_feeling, paste0("SUM_COMP_JOURNEY_USE_D_BEFORE_", s),
+#                    paste0("Comp Journey Use (Sum) -- BEFORE ", s))
+#   print_range_avg(daily_cases_low_feeling, paste0("SUM_COMP_JOURNEY_USE_D_AFTER_", s),
+#                    paste0("Comp Journey Use (Sum) -- AFTER ", s))
+#   print_range_avg(daily_cases_low_feeling, paste0("COUNT_FEELING2_BEFORE_", s),
+#                    paste0("# Times FEELINGRATING = 2 -- BEFORE ", s))
+#   print_range_avg(daily_cases_low_feeling, paste0("COUNT_FEELING2_AFTER_", s),
+#                    paste0("# Times FEELINGRATING = 2 -- AFTER ", s))
+# }
 
 ```
 
 # Daily Case Counts Plots - Rolling Minimum
 
 ```{r Daily_Case_Count_Plot_Rolling_Min}
-
-# ---------------------------------------------------------------------
-# Crosstab: JOURNEY_INCREASE_1WK x MEAN_FEELINGRATING_CHANGE_1WK
-# ---------------------------------------------------------------------
-crosstab_1wk_rolling_min <- daily_cases_rolling_min %>%
-  filter(!is.na(JOURNEY_INCREASE_1WK), !is.na(MEAN_FEELINGRATING_CHANGE_1WK)) %>%
-  select(JOURNEY_INCREASE_1WK, MEAN_FEELINGRATING_CHANGE_1WK) %>%
-  tbl_cross(
-    row     = JOURNEY_INCREASE_1WK,
-    col     = MEAN_FEELINGRATING_CHANGE_1WK,
-    percent = "row",     # cell percentages (of the table total)
-    digits  = c(0, 1),   # 0 decimals for N, 1 decimal for %
-    missing = "no",      # safety net: don't add a "missing" row/col
-    label   = list(      # <-- customize row/col display labels here
-      JOURNEY_INCREASE_1WK          ~ "Journey Use Increased?",
-      MEAN_FEELINGRATING_CHANGE_1WK ~ "Mood Change"
-    )
-  ) %>%
-  bold_labels() %>%
-  modify_caption("**Did Journey Use and Mood Change Over the Last Week? -- Rolling Minimum**")  # <-- customize title here
-
-crosstab_1wk_rolling_min
-
-# ---------------------------------------------------------------------
-# Crosstab: JOURNEY_INCREASE_2WK x MEAN_FEELINGRATING_CHANGE_2WK
-# ---------------------------------------------------------------------
-crosstab_2wk_rolling_min <- daily_cases_rolling_min %>%
-  filter(!is.na(JOURNEY_INCREASE_2WK), !is.na(MEAN_FEELINGRATING_CHANGE_2WK)) %>%
-  select(JOURNEY_INCREASE_2WK, MEAN_FEELINGRATING_CHANGE_2WK) %>%
-  tbl_cross(
-    row     = JOURNEY_INCREASE_2WK,
-    col     = MEAN_FEELINGRATING_CHANGE_2WK,
-    percent = "row",
-    digits  = c(0, 1),
-    missing = "no",
-    label   = list(      # <-- customize row/col display labels here
-      JOURNEY_INCREASE_2WK          ~ "Journey Use Increased?",
-      MEAN_FEELINGRATING_CHANGE_2WK ~ "Mood Change"
-    )
-  ) %>%
-  bold_labels() %>%
-  modify_caption("**Did Journey Use and Mood Change Over the Last 2 Weeks? -- Rolling Minimum**")  # <-- customize title here
-
-crosstab_2wk_rolling_min
-
-# ---------------------------------------------------------------------
-# Crosstab: JOURNEY_INCREASE_1 x MEAN_FEELINGRATING_CHANGE_1
-# ---------------------------------------------------------------------
-crosstab_1_rolling_min <- daily_cases_rolling_min %>%
-  filter(!is.na(JOURNEY_INCREASE_1), !is.na(MEAN_FEELINGRATING_CHANGE_1)) %>%
-  select(JOURNEY_INCREASE_1, MEAN_FEELINGRATING_CHANGE_1) %>%
-  tbl_cross(
-    row     = JOURNEY_INCREASE_1,
-    col     = MEAN_FEELINGRATING_CHANGE_1,
-    percent = "row",     # cell percentages (of the table total)
-    digits  = c(0, 1),   # 0 decimals for N, 1 decimal for %
-    missing = "no",      # safety net: don't add a "missing" row/col
-    label   = list(      # <-- customize row/col display labels here
-      JOURNEY_INCREASE_1          ~ "Journey Use Increased?",
-      MEAN_FEELINGRATING_CHANGE_1 ~ "Mood Change"
-    )
-  ) %>%
-  bold_labels() %>%
-  modify_caption("**Did Journey Use and Mood Change Over the Last Month? -- Rolling Minimum**")  # <-- customize title here
-
-crosstab_1_rolling_min
-
-# ---------------------------------------------------------------------
-# Crosstab: JOURNEY_INCREASE_3 x MEAN_FEELINGRATING_CHANGE_3
-# ---------------------------------------------------------------------
-crosstab_3_rolling_min <- daily_cases_rolling_min %>%
-  filter(!is.na(JOURNEY_INCREASE_3), !is.na(MEAN_FEELINGRATING_CHANGE_3)) %>%
-  select(JOURNEY_INCREASE_3, MEAN_FEELINGRATING_CHANGE_3) %>%
-  tbl_cross(
-    row     = JOURNEY_INCREASE_3,
-    col     = MEAN_FEELINGRATING_CHANGE_3,
-    percent = "row",
-    digits  = c(0, 1),
-    missing = "no",
-    label   = list(      # <-- customize row/col display labels here
-      JOURNEY_INCREASE_3          ~ "Journey Use Increased?",
-      MEAN_FEELINGRATING_CHANGE_3 ~ "Mood Change"
-    )
-  ) %>%
-  bold_labels() %>%
-  modify_caption("**Did Journey Use and Mood Change Over the Last 3 Months? -- Rolling Minimum**")  # <-- customize title here
-
-crosstab_3_rolling_min
-
-# ---------------------------------------------------------------------
-# Crosstab: JOURNEY_INCREASE_6 x MEAN_FEELINGRATING_CHANGE_6
-# ---------------------------------------------------------------------
-crosstab_6_rolling_min <- daily_cases_rolling_min %>%
-  filter(!is.na(JOURNEY_INCREASE_6), !is.na(MEAN_FEELINGRATING_CHANGE_6)) %>%
-  select(JOURNEY_INCREASE_6, MEAN_FEELINGRATING_CHANGE_6) %>%
-  tbl_cross(
-    row     = JOURNEY_INCREASE_6,
-    col     = MEAN_FEELINGRATING_CHANGE_6,
-    percent = "row",
-    digits  = c(0, 1),
-    missing = "no",
-    label   = list(      # <-- customize row/col display labels here
-      JOURNEY_INCREASE_6          ~ "Journey Use Increased?",
-      MEAN_FEELINGRATING_CHANGE_6 ~ "Mood Change"
-    )
-  ) %>%
-  bold_labels() %>%
-  modify_caption("**Did Journey Use and Mood Change Over the Last 6 Months? -- Rolling Minimum**")  # <-- customize title here
-
-crosstab_6_rolling_min
-
-for (s in window_suffixes) {
-  print_range_avg(daily_cases_rolling_min, paste0("SUM_COMP_JOURNEY_USE_D_BEFORE_", s),
-                   paste0("Comp Journey Use (Sum) -- BEFORE ", s))
-  print_range_avg(daily_cases_rolling_min, paste0("SUM_COMP_JOURNEY_USE_D_AFTER_", s),
-                   paste0("Comp Journey Use (Sum) -- AFTER ", s))
-  print_range_avg(daily_cases_rolling_min, paste0("COUNT_FEELING2_BEFORE_", s),
-                   paste0("# Times FEELINGRATING = 2 -- BEFORE ", s))
-  print_range_avg(daily_cases_rolling_min, paste0("COUNT_FEELING2_AFTER_", s),
-                   paste0("# Times FEELINGRATING = 2 -- AFTER ", s))
-}
+# 
+# # ---------------------------------------------------------------------
+# # Crosstab: JOURNEY_INCREASE_1WK x MEAN_FEELINGRATING_CHANGE_1WK
+# # ---------------------------------------------------------------------
+# crosstab_1wk_rolling_min <- daily_cases_rolling_min %>%
+#   filter(!is.na(JOURNEY_INCREASE_1WK), !is.na(MEAN_FEELINGRATING_CHANGE_1WK)) %>%
+#   select(JOURNEY_INCREASE_1WK, MEAN_FEELINGRATING_CHANGE_1WK) %>%
+#   tbl_cross(
+#     row     = JOURNEY_INCREASE_1WK,
+#     col     = MEAN_FEELINGRATING_CHANGE_1WK,
+#     percent = "row",     # cell percentages (of the table total)
+#     digits  = c(0, 1),   # 0 decimals for N, 1 decimal for %
+#     missing = "no",      # safety net: don't add a "missing" row/col
+#     label   = list(      # <-- customize row/col display labels here
+#       JOURNEY_INCREASE_1WK          ~ "Journey Use Increased?",
+#       MEAN_FEELINGRATING_CHANGE_1WK ~ "Mood Change"
+#     )
+#   ) %>%
+#   bold_labels() %>%
+#   modify_caption("**Did Journey Use and Mood Change Over the Last Week? -- Rolling Minimum**")  # <-- customize title here
+# 
+# crosstab_1wk_rolling_min
+# 
+# # ---------------------------------------------------------------------
+# # Crosstab: JOURNEY_INCREASE_2WK x MEAN_FEELINGRATING_CHANGE_2WK
+# # ---------------------------------------------------------------------
+# crosstab_2wk_rolling_min <- daily_cases_rolling_min %>%
+#   filter(!is.na(JOURNEY_INCREASE_2WK), !is.na(MEAN_FEELINGRATING_CHANGE_2WK)) %>%
+#   select(JOURNEY_INCREASE_2WK, MEAN_FEELINGRATING_CHANGE_2WK) %>%
+#   tbl_cross(
+#     row     = JOURNEY_INCREASE_2WK,
+#     col     = MEAN_FEELINGRATING_CHANGE_2WK,
+#     percent = "row",
+#     digits  = c(0, 1),
+#     missing = "no",
+#     label   = list(      # <-- customize row/col display labels here
+#       JOURNEY_INCREASE_2WK          ~ "Journey Use Increased?",
+#       MEAN_FEELINGRATING_CHANGE_2WK ~ "Mood Change"
+#     )
+#   ) %>%
+#   bold_labels() %>%
+#   modify_caption("**Did Journey Use and Mood Change Over the Last 2 Weeks? -- Rolling Minimum**")  # <-- customize title here
+# 
+# crosstab_2wk_rolling_min
+# 
+# # ---------------------------------------------------------------------
+# # Crosstab: JOURNEY_INCREASE_1 x MEAN_FEELINGRATING_CHANGE_1
+# # ---------------------------------------------------------------------
+# crosstab_1_rolling_min <- daily_cases_rolling_min %>%
+#   filter(!is.na(JOURNEY_INCREASE_1), !is.na(MEAN_FEELINGRATING_CHANGE_1)) %>%
+#   select(JOURNEY_INCREASE_1, MEAN_FEELINGRATING_CHANGE_1) %>%
+#   tbl_cross(
+#     row     = JOURNEY_INCREASE_1,
+#     col     = MEAN_FEELINGRATING_CHANGE_1,
+#     percent = "row",     # cell percentages (of the table total)
+#     digits  = c(0, 1),   # 0 decimals for N, 1 decimal for %
+#     missing = "no",      # safety net: don't add a "missing" row/col
+#     label   = list(      # <-- customize row/col display labels here
+#       JOURNEY_INCREASE_1          ~ "Journey Use Increased?",
+#       MEAN_FEELINGRATING_CHANGE_1 ~ "Mood Change"
+#     )
+#   ) %>%
+#   bold_labels() %>%
+#   modify_caption("**Did Journey Use and Mood Change Over the Last Month? -- Rolling Minimum**")  # <-- customize title here
+# 
+# crosstab_1_rolling_min
+# 
+# # ---------------------------------------------------------------------
+# # Crosstab: JOURNEY_INCREASE_3 x MEAN_FEELINGRATING_CHANGE_3
+# # ---------------------------------------------------------------------
+# crosstab_3_rolling_min <- daily_cases_rolling_min %>%
+#   filter(!is.na(JOURNEY_INCREASE_3), !is.na(MEAN_FEELINGRATING_CHANGE_3)) %>%
+#   select(JOURNEY_INCREASE_3, MEAN_FEELINGRATING_CHANGE_3) %>%
+#   tbl_cross(
+#     row     = JOURNEY_INCREASE_3,
+#     col     = MEAN_FEELINGRATING_CHANGE_3,
+#     percent = "row",
+#     digits  = c(0, 1),
+#     missing = "no",
+#     label   = list(      # <-- customize row/col display labels here
+#       JOURNEY_INCREASE_3          ~ "Journey Use Increased?",
+#       MEAN_FEELINGRATING_CHANGE_3 ~ "Mood Change"
+#     )
+#   ) %>%
+#   bold_labels() %>%
+#   modify_caption("**Did Journey Use and Mood Change Over the Last 3 Months? -- Rolling Minimum**")  # <-- customize title here
+# 
+# crosstab_3_rolling_min
+# 
+# # ---------------------------------------------------------------------
+# # Crosstab: JOURNEY_INCREASE_6 x MEAN_FEELINGRATING_CHANGE_6
+# # ---------------------------------------------------------------------
+# crosstab_6_rolling_min <- daily_cases_rolling_min %>%
+#   filter(!is.na(JOURNEY_INCREASE_6), !is.na(MEAN_FEELINGRATING_CHANGE_6)) %>%
+#   select(JOURNEY_INCREASE_6, MEAN_FEELINGRATING_CHANGE_6) %>%
+#   tbl_cross(
+#     row     = JOURNEY_INCREASE_6,
+#     col     = MEAN_FEELINGRATING_CHANGE_6,
+#     percent = "row",
+#     digits  = c(0, 1),
+#     missing = "no",
+#     label   = list(      # <-- customize row/col display labels here
+#       JOURNEY_INCREASE_6          ~ "Journey Use Increased?",
+#       MEAN_FEELINGRATING_CHANGE_6 ~ "Mood Change"
+#     )
+#   ) %>%
+#   bold_labels() %>%
+#   modify_caption("**Did Journey Use and Mood Change Over the Last 6 Months? -- Rolling Minimum**")  # <-- customize title here
+# 
+# crosstab_6_rolling_min
+# 
+# for (s in window_suffixes) {
+#   print_range_avg(daily_cases_rolling_min, paste0("SUM_COMP_JOURNEY_USE_D_BEFORE_", s),
+#                    paste0("Comp Journey Use (Sum) -- BEFORE ", s))
+#   print_range_avg(daily_cases_rolling_min, paste0("SUM_COMP_JOURNEY_USE_D_AFTER_", s),
+#                    paste0("Comp Journey Use (Sum) -- AFTER ", s))
+#   print_range_avg(daily_cases_rolling_min, paste0("COUNT_FEELING2_BEFORE_", s),
+#                    paste0("# Times FEELINGRATING = 2 -- BEFORE ", s))
+#   print_range_avg(daily_cases_rolling_min, paste0("COUNT_FEELING2_AFTER_", s),
+#                    paste0("# Times FEELINGRATING = 2 -- AFTER ", s))
+# }
 
 ```
 
@@ -549,117 +549,117 @@ kable(Low_Mood_Cors_DF)
 # Rolling Min Mood and Usage Correlations
 
 ```{r Rolling_Min_Usage_Correlations}
-
-Outcomes <- c("MEAN_FEELINGRATING_BEFORE_1WK", "MEAN_FEELINGRATING_BEFORE_2WK", "MEAN_FEELINGRATING_BEFORE_1", "MEAN_FEELINGRATING_BEFORE_3", "MEAN_FEELINGRATING_BEFORE_6", "MEAN_FEELINGRATING_AFTER_1WK", "MEAN_FEELINGRATING_AFTER_2WK", "MEAN_FEELINGRATING_AFTER_1", "MEAN_FEELINGRATING_AFTER_3", "MEAN_FEELINGRATING_AFTER_6")
-
-Pred <- daily_cases_rolling_min[, which(grepl("SUM_COMP_JOURNEY_USE_D_", names(daily_cases_rolling_min)) | names(daily_cases_rolling_min) %in% Outcomes)]
-
-Cors_list <- NULL
-
-for (i in Outcomes) {
-  
-  ctest_M <- corr.test(Pred)
-  r_value_M <- round(ctest_M$r[, i], 4)
-  p_value_M <- round(ctest_M$p[, i], 4)
-  n_value_M <- ctest_M$n[, i]
-  
-  rolling_min_cors <- data.frame(Correlation = r_value_M, P_Value = p_value_M, N = n_value_M, Outcome = i)
-  
-  rolling_min_cors$Predictor <- sub(".*\\.", "", rownames(rolling_min_cors))
-  
-  Cors_list[[i]] <- rolling_min_cors
-  
-}
-
-rolling_min_cors_DF <- do.call(rbind, Cors_list)
-
-rownames(rolling_min_cors_DF) <- NULL
-
-rolling_min_cors_DF <- rolling_min_cors_DF[which(grepl("MEAN_", rolling_min_cors_DF$Outcome) & grepl("SUM_", rolling_min_cors_DF$Predictor) & rolling_min_cors_DF$P_Value < .1),]
-
-rolling_min_cors_DF <- rolling_min_cors_DF %>%
-  select(Outcome, Predictor, everything()) %>%
-  arrange(Outcome, desc(Correlation))
-
-kable(rolling_min_cors_DF)
+# 
+# Outcomes <- c("MEAN_FEELINGRATING_BEFORE_1WK", "MEAN_FEELINGRATING_BEFORE_2WK", "MEAN_FEELINGRATING_BEFORE_1", "MEAN_FEELINGRATING_BEFORE_3", "MEAN_FEELINGRATING_BEFORE_6", "MEAN_FEELINGRATING_AFTER_1WK", "MEAN_FEELINGRATING_AFTER_2WK", "MEAN_FEELINGRATING_AFTER_1", "MEAN_FEELINGRATING_AFTER_3", "MEAN_FEELINGRATING_AFTER_6")
+# 
+# Pred <- daily_cases_rolling_min[, which(grepl("SUM_COMP_JOURNEY_USE_D_", names(daily_cases_rolling_min)) | names(daily_cases_rolling_min) %in% Outcomes)]
+# 
+# Cors_list <- NULL
+# 
+# for (i in Outcomes) {
+#   
+#   ctest_M <- corr.test(Pred)
+#   r_value_M <- round(ctest_M$r[, i], 4)
+#   p_value_M <- round(ctest_M$p[, i], 4)
+#   n_value_M <- ctest_M$n[, i]
+#   
+#   rolling_min_cors <- data.frame(Correlation = r_value_M, P_Value = p_value_M, N = n_value_M, Outcome = i)
+#   
+#   rolling_min_cors$Predictor <- sub(".*\\.", "", rownames(rolling_min_cors))
+#   
+#   Cors_list[[i]] <- rolling_min_cors
+#   
+# }
+# 
+# rolling_min_cors_DF <- do.call(rbind, Cors_list)
+# 
+# rownames(rolling_min_cors_DF) <- NULL
+# 
+# rolling_min_cors_DF <- rolling_min_cors_DF[which(grepl("MEAN_", rolling_min_cors_DF$Outcome) & grepl("SUM_", rolling_min_cors_DF$Predictor) & rolling_min_cors_DF$P_Value < .1),]
+# 
+# rolling_min_cors_DF <- rolling_min_cors_DF %>%
+#   select(Outcome, Predictor, everything()) %>%
+#   arrange(Outcome, desc(Correlation))
+# 
+# kable(rolling_min_cors_DF)
 
 ```
 
 ```{r Daily_Mood_Rating_Descriptives}
-
-Comp_DF %>%
-  filter(!is.na(FEELINGRATING)) %>%
-  distinct(USERID, FEELINGRATING) %>%
-  count(FEELINGRATING, name = "N_USERIDS") %>%
-  mutate(PCT_USERIDS = round(100 * N_USERIDS / n_distinct(Comp_DF$USERID), 1))
-
-# How many different ratings do most users report
-
-Comp_DF %>%
-  filter(!is.na(FEELINGRATING)) %>%
-  distinct(USERID, FEELINGRATING) %>%
-  count(USERID, name = "N_DISTINCT_VALUES") %>%
-  summarise(
-    AVG_DISTINCT_VALUES    = mean(N_DISTINCT_VALUES),
-    MEDIAN_DISTINCT_VALUES = median(N_DISTINCT_VALUES)
-  )
-
-Comp_DF %>%
-  filter(!is.na(FEELINGRATING)) %>%
-  group_by(USERID) %>%
-  summarise(
-    N_DISTINCT_VALUES  = n_distinct(FEELINGRATING),  # distinct FEELINGRATING values reported
-    N_TOTAL_RESPONSES  = n(),                        # total FEELINGRATING responses (all rows, incl. repeats)
-    .groups = "drop"
-  ) %>%
-  group_by(N_DISTINCT_VALUES) %>%
-  summarise(
-    N_USERIDS            = n(),
-    AVG_TOTAL_RESPONSES  = round(mean(N_TOTAL_RESPONSES), 1),
-    .groups = "drop"
-  ) %>%
-  mutate(PCT_USERIDS = round(100 * N_USERIDS / sum(N_USERIDS), 1)) %>%
-  arrange(N_DISTINCT_VALUES) %>%
-  select(N_DISTINCT_VALUES, N_USERIDS, PCT_USERIDS, AVG_TOTAL_RESPONSES)
+# 
+# Comp_DF %>%
+#   filter(!is.na(FEELINGRATING)) %>%
+#   distinct(USERID, FEELINGRATING) %>%
+#   count(FEELINGRATING, name = "N_USERIDS") %>%
+#   mutate(PCT_USERIDS = round(100 * N_USERIDS / n_distinct(Comp_DF$USERID), 1))
+# 
+# # How many different ratings do most users report
+# 
+# Comp_DF %>%
+#   filter(!is.na(FEELINGRATING)) %>%
+#   distinct(USERID, FEELINGRATING) %>%
+#   count(USERID, name = "N_DISTINCT_VALUES") %>%
+#   summarise(
+#     AVG_DISTINCT_VALUES    = mean(N_DISTINCT_VALUES),
+#     MEDIAN_DISTINCT_VALUES = median(N_DISTINCT_VALUES)
+#   )
+# 
+# Comp_DF %>%
+#   filter(!is.na(FEELINGRATING)) %>%
+#   group_by(USERID) %>%
+#   summarise(
+#     N_DISTINCT_VALUES  = n_distinct(FEELINGRATING),  # distinct FEELINGRATING values reported
+#     N_TOTAL_RESPONSES  = n(),                        # total FEELINGRATING responses (all rows, incl. repeats)
+#     .groups = "drop"
+#   ) %>%
+#   group_by(N_DISTINCT_VALUES) %>%
+#   summarise(
+#     N_USERIDS            = n(),
+#     AVG_TOTAL_RESPONSES  = round(mean(N_TOTAL_RESPONSES), 1),
+#     .groups = "drop"
+#   ) %>%
+#   mutate(PCT_USERIDS = round(100 * N_USERIDS / sum(N_USERIDS), 1)) %>%
+#   arrange(N_DISTINCT_VALUES) %>%
+#   select(N_DISTINCT_VALUES, N_USERIDS, PCT_USERIDS, AVG_TOTAL_RESPONSES)
 
 ```
 
 ``` {r Low_Mood_Participant_Monthly_Answers}
-
-# Look at “bad and OK” users included in that analysis and show how are they scoring on the other monthly measures (avg and range)
-# How many times did they answer monthly?
-
-Low_Mood_Monthly_Assessments <- Monthly_Assessments %>%
-  filter(USERID %in% daily_cases_low_feeling$USERID)
-
-measure_cols <- c("STRESSLEVEL", "MANAGESTRESSLEVEL", "MANAGEFEELINGSLEVEL",
-                   "FEELINGSFREQUENCY", "DAYSEMOTIONALLYCHALLENGING")
-
-measure_summary <- Low_Mood_Monthly_Assessments %>%
-  summarise(across(
-    all_of(measure_cols),
-    list(
-      MIN     = ~ suppressWarnings(min(.x, na.rm = TRUE)),
-      MAX     = ~ suppressWarnings(max(.x, na.rm = TRUE)),
-      AVERAGE = ~ round(mean(.x, na.rm = TRUE), 2)
-    ),
-    .names = "{.col}_{.fn}"
-  ))
-
-print(measure_summary)
-
-distinct_dates_per_user <- Low_Mood_Monthly_Assessments %>%
-  group_by(USERID) %>%
-  summarise(N_DISTINCT_ASSESSMENTDATE = n_distinct(EVENTDATE), .groups = "drop")
-
-distinct_dates_summary <- distinct_dates_per_user %>%
-  summarise(
-    MIN_DISTINCT_DATES     = min(N_DISTINCT_ASSESSMENTDATE, na.rm = TRUE),
-    MAX_DISTINCT_DATES     = max(N_DISTINCT_ASSESSMENTDATE, na.rm = TRUE),
-    AVERAGE_DISTINCT_DATES = round(mean(N_DISTINCT_ASSESSMENTDATE, na.rm = TRUE), 2)
-  )
-
-print(distinct_dates_summary)
+# 
+# # Look at “bad and OK” users included in that analysis and show how are they scoring on the other monthly measures (avg and range)
+# # How many times did they answer monthly?
+# 
+# Low_Mood_Monthly_Assessments <- Monthly_Assessments %>%
+#   filter(USERID %in% daily_cases_low_feeling$USERID)
+# 
+# measure_cols <- c("STRESSLEVEL", "MANAGESTRESSLEVEL", "MANAGEFEELINGSLEVEL",
+#                    "FEELINGSFREQUENCY", "DAYSEMOTIONALLYCHALLENGING")
+# 
+# measure_summary <- Low_Mood_Monthly_Assessments %>%
+#   summarise(across(
+#     all_of(measure_cols),
+#     list(
+#       MIN     = ~ suppressWarnings(min(.x, na.rm = TRUE)),
+#       MAX     = ~ suppressWarnings(max(.x, na.rm = TRUE)),
+#       AVERAGE = ~ round(mean(.x, na.rm = TRUE), 2)
+#     ),
+#     .names = "{.col}_{.fn}"
+#   ))
+# 
+# print(measure_summary)
+# 
+# distinct_dates_per_user <- Low_Mood_Monthly_Assessments %>%
+#   group_by(USERID) %>%
+#   summarise(N_DISTINCT_ASSESSMENTDATE = n_distinct(EVENTDATE), .groups = "drop")
+# 
+# distinct_dates_summary <- distinct_dates_per_user %>%
+#   summarise(
+#     MIN_DISTINCT_DATES     = min(N_DISTINCT_ASSESSMENTDATE, na.rm = TRUE),
+#     MAX_DISTINCT_DATES     = max(N_DISTINCT_ASSESSMENTDATE, na.rm = TRUE),
+#     AVERAGE_DISTINCT_DATES = round(mean(N_DISTINCT_ASSESSMENTDATE, na.rm = TRUE), 2)
+#   )
+# 
+# print(distinct_dates_summary)
 
 ```
 

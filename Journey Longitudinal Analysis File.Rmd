@@ -658,37 +658,153 @@ kable(Low_Mood_Cors_DF)
 #  
 # # Look at “bad and OK” users included in that analysis and show how are they scoring on the other monthly measures (avg and range)
 # # How many times did they answer monthly?
-#  
-#  High_Mood_Monthly_Assessments <- Monthly_Assessments %>%
-#    filter(!(USERID %in% daily_cases_low_feeling$USERID))
-#  
-#  measure_cols <- c("STRESSLEVEL", "MANAGESTRESSLEVEL", "MANAGEFEELINGSLEVEL",
-#                     "FEELINGSFREQUENCY", "DAYSEMOTIONALLYCHALLENGING")
-#  
-#  measure_summary <- High_Mood_Monthly_Assessments %>%
-#    summarise(across(
-#      all_of(measure_cols),
-#      list(
-#        MIN     = ~ suppressWarnings(min(.x, na.rm = TRUE)),
-#        MAX     = ~ suppressWarnings(max(.x, na.rm = TRUE)),
-#        AVERAGE = ~ round(mean(.x, na.rm = TRUE), 2)
-#      ),
-#      .names = "{.col}_{.fn}"
-#    ))
-#  
-#  print(measure_summary)
-#  
-#  distinct_dates_per_user <- High_Mood_Monthly_Assessments %>%
-#    group_by(USERID) %>%
-#    summarise(N_DISTINCT_ASSESSMENTDATE = n_distinct(EVENTDATE), .groups = "drop")
-#  
-#  distinct_dates_summary <- distinct_dates_per_user %>%
-#    summarise(
-#      MIN_DISTINCT_DATES     = min(N_DISTINCT_ASSESSMENTDATE, na.rm = TRUE),
-#      MAX_DISTINCT_DATES     = max(N_DISTINCT_ASSESSMENTDATE, na.rm = TRUE),
-#      AVERAGE_DISTINCT_DATES = round(mean(N_DISTINCT_ASSESSMENTDATE, na.rm = TRUE), 2)
-#    )
-#  
-#  print(distinct_dates_summary)
+  
+  High_Mood_Monthly_Assessments <- Monthly_Assessments %>%
+    filter(!(USERID %in% daily_cases_low_feeling$USERID))
+  
+  measure_cols <- c("STRESSLEVEL", "MANAGESTRESSLEVEL", "MANAGEFEELINGSLEVEL",
+                     "FEELINGSFREQUENCY", "DAYSEMOTIONALLYCHALLENGING")
+  
+  measure_summary <- High_Mood_Monthly_Assessments %>%
+    summarise(across(
+      all_of(measure_cols),
+      list(
+        MIN     = ~ suppressWarnings(min(.x, na.rm = TRUE)),
+        MAX     = ~ suppressWarnings(max(.x, na.rm = TRUE)),
+        AVERAGE = ~ round(mean(.x, na.rm = TRUE), 2)
+      ),
+      .names = "{.col}_{.fn}"
+    ))
+  
+  print(measure_summary)
+  
+  distinct_dates_per_user <- High_Mood_Monthly_Assessments %>%
+    group_by(USERID) %>%
+    summarise(N_DISTINCT_ASSESSMENTDATE = n_distinct(EVENTDATE), .groups = "drop")
+  
+  distinct_dates_summary <- distinct_dates_per_user %>%
+    summarise(
+      MIN_DISTINCT_DATES     = min(N_DISTINCT_ASSESSMENTDATE, na.rm = TRUE),
+      MAX_DISTINCT_DATES     = max(N_DISTINCT_ASSESSMENTDATE, na.rm = TRUE),
+      AVERAGE_DISTINCT_DATES = round(mean(N_DISTINCT_ASSESSMENTDATE, na.rm = TRUE), 2)
+    )
+  
+  print(distinct_dates_summary)
+
+```
+
+
+``` {r low_high_mood_differences}
+
+HI <- High_Mood_Monthly_Assessments[, which(names(High_Mood_Monthly_Assessments) %in% measure_cols)]
+
+HI$GROUP <- rep("HI")
+  
+LO <- Low_Mood_Monthly_Assessments[, which(names(Low_Mood_Monthly_Assessments) %in% measure_cols)]
+
+LO$GROUP <- rep("LO")
+
+HI_LO <- rbind(HI, LO)
+
+t.test(STRESSLEVEL ~ GROUP, HI_LO)
+
+t.test(MANAGESTRESSLEVEL ~ GROUP, HI_LO)
+
+t.test(MANAGEFEELINGSLEVEL ~ GROUP, HI_LO)
+
+t.test(FEELINGSFREQUENCY ~ GROUP, HI_LO)
+
+t.test(DAYSEMOTIONALLYCHALLENGING ~ GROUP, HI_LO)
+
+t.test(STRESSLEVEL ~ GROUP, HI_LO)
+
+t.test(STRESSLEVEL ~ GROUP, HI_LO)
+
+corr.test(Comp_DF$Comp_JOURNEY_USE_D, Comp_DF$FEELINGRATING)
+
+
+model1 <- lmer(FEELINGRATING ~(1 | USERID), data = Comp_DF[which(Comp_DF$USERID %in% Low_Mood_Monthly_Assessments$USERID),])
+
+summary(model1)
+
+model2 <- lmer(FEELINGRATING ~(1 | USERID), data = Comp_DF[which(!(Comp_DF$USERID %in% Low_Mood_Monthly_Assessments$USERID)),])
+
+summary(model2)
+
+```
+
+``` {r mood_use_mlm_correlation_analyses}
+
+daily_cases_low_feeling_line_level <- Comp_DF %>%
+  mutate(EVENTDATE = as.Date(EVENTDATE, format = "%Y-%m-%d")) %>%
+  filter(USERID %in% qualifying_userids)
+
+# helper: for one window length, compute each USERID's BEFORE/AFTER
+# date boundaries (mirrors the logic inside build_before_after(), but
+# stops short of summarizing FEELINGRATING/Comp_JOURNEY_USE_D)
+build_window_bounds <- function(data, baseline_dates, add_period) {
+  data %>%
+    left_join(baseline_dates, by = "USERID") %>%
+    group_by(USERID) %>%
+    summarise(
+      BASELINE_DATE = BASELINE_DATE[1],
+      BEFORE_END    = add_period(BASELINE_DATE[1]),
+
+      BEFORE_LAST_DATE = suppressWarnings(max(
+        EVENTDATE[EVENTDATE >= BASELINE_DATE & EVENTDATE < BEFORE_END],
+        na.rm = TRUE
+      )),
+      BEFORE_LAST_DATE = as.Date(ifelse(is.infinite(BEFORE_LAST_DATE), NA, BEFORE_LAST_DATE),
+                                  origin = "1970-01-01"),
+
+      AFTER_START = suppressWarnings(min(
+        EVENTDATE[!is.na(BEFORE_LAST_DATE) & EVENTDATE > BEFORE_LAST_DATE],
+        na.rm = TRUE
+      )),
+      AFTER_START = as.Date(ifelse(is.infinite(AFTER_START), NA, AFTER_START),
+                             origin = "1970-01-01"),
+      AFTER_END   = add_period(AFTER_START),
+      .groups = "drop"
+    )
+}
+
+# helper: join the window boundaries back onto every line-level row,
+# then keep only rows that actually fall inside the BEFORE or AFTER
+# window for that USERID -- this is the "before any grouping" output
+build_window_line_level <- function(data, baseline_dates, add_period) {
+  bounds <- build_window_bounds(data, baseline_dates, add_period)
+
+  data %>%
+    inner_join(bounds, by = "USERID") %>%
+    mutate(
+      WINDOW_PERIOD = case_when(
+        EVENTDATE >= BASELINE_DATE & EVENTDATE < BEFORE_END ~ "BEFORE",
+        !is.na(AFTER_START) & EVENTDATE >= AFTER_START & EVENTDATE < AFTER_END ~ "AFTER",
+        TRUE ~ NA_character_
+      )
+    ) %>%
+    filter(!is.na(WINDOW_PERIOD))
+}
+
+daily_cases_low_feeling_lines_1wk <- build_window_line_level(daily_cases_low_feeling_line_level, baseline_dates, function(d) d + weeks(1))
+daily_cases_low_feeling_lines_2wk <- build_window_line_level(daily_cases_low_feeling_line_level, baseline_dates, function(d) d + weeks(2))
+daily_cases_low_feeling_lines_1   <- build_window_line_level(daily_cases_low_feeling_line_level, baseline_dates, function(d) d %m+% months(1))
+daily_cases_low_feeling_lines_3   <- build_window_line_level(daily_cases_low_feeling_line_level, baseline_dates, function(d) d %m+% months(3))
+daily_cases_low_feeling_lines_6   <- build_window_line_level(daily_cases_low_feeling_line_level, baseline_dates, function(d) d %m+% months(6))
+
+
+model_low_1wk <- lmer(FEELINGRATING ~ Comp_JOURNEY_USE_D + (1 | USERID), data = daily_cases_low_feeling_lines_1wk)
+
+model_low_6mo <- lmer(FEELINGRATING ~ Comp_JOURNEY_USE_D + (1 | USERID), data = daily_cases_low_feeling_lines_6)
+
+summary(model_low_1wk)
+
+summary(model_low_6mo)
+
+
+model_low_1 <- lmer(FEELINGRATING ~ Comp_JOURNEY_USE_D * WINDOW_PERIOD + (1 | USERID), data = daily_cases_low_feeling_lines_1wk)
+
+summary(model_low_1)
+
 
 ```

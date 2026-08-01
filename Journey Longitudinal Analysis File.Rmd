@@ -769,12 +769,13 @@ build_window_bounds <- function(data, baseline_dates, add_period) {
 }
 
 # helper: join the window boundaries back onto every line-level row,
-# then keep only rows that actually fall inside the BEFORE or AFTER
-# window for that USERID -- this is the "before any grouping" output
+# tag each row BEFORE/AFTER, then restrict to USERIDs who have AT
+# LEAST 3 observations in BOTH the BEFORE and AFTER windows for this
+# window length -- this is the "before any grouping" output
 build_window_line_level <- function(data, baseline_dates, add_period) {
   bounds <- build_window_bounds(data, baseline_dates, add_period)
 
-  data %>%
+  tagged <- data %>%
     inner_join(bounds, by = "USERID") %>%
     mutate(
       WINDOW_PERIOD = case_when(
@@ -784,6 +785,21 @@ build_window_line_level <- function(data, baseline_dates, add_period) {
       )
     ) %>%
     filter(!is.na(WINDOW_PERIOD))
+
+  # per-USERID observation counts in each period; only keep USERIDs
+  # with >= 3 rows in BOTH BEFORE and AFTER
+  qualifying_userids_min3 <- tagged %>%
+    group_by(USERID) %>%
+    summarise(
+      N_BEFORE = sum(WINDOW_PERIOD == "BEFORE"),
+      N_AFTER  = sum(WINDOW_PERIOD == "AFTER"),
+      .groups = "drop"
+    ) %>%
+    filter(N_BEFORE >= 4, N_AFTER >= 4) %>%
+    pull(USERID)
+
+  tagged %>%
+    filter(USERID %in% qualifying_userids_min3)
 }
 
 daily_cases_low_feeling_lines_1wk <- build_window_line_level(daily_cases_low_feeling_line_level, baseline_dates, function(d) d + weeks(1))
@@ -795,16 +811,43 @@ daily_cases_low_feeling_lines_6   <- build_window_line_level(daily_cases_low_fee
 
 model_low_1wk <- lmer(FEELINGRATING ~ Comp_JOURNEY_USE_D + (1 | USERID), data = daily_cases_low_feeling_lines_1wk)
 
+model_low_2wk <- lmer(FEELINGRATING ~ Comp_JOURNEY_USE_D + (1 | USERID), data = daily_cases_low_feeling_lines_2wk)
+
+model_low_1mo <- lmer(FEELINGRATING ~ Comp_JOURNEY_USE_D + (1 | USERID), data = daily_cases_low_feeling_lines_1)
+
+model_low_3mo <- lmer(FEELINGRATING ~ Comp_JOURNEY_USE_D + (1 | USERID), data = daily_cases_low_feeling_lines_3)
+
 model_low_6mo <- lmer(FEELINGRATING ~ Comp_JOURNEY_USE_D + (1 | USERID), data = daily_cases_low_feeling_lines_6)
+
+model_low_1wk_interaction <- lmer(FEELINGRATING ~ Comp_JOURNEY_USE_D * WINDOW_PERIOD + (1 | USERID), data = daily_cases_low_feeling_lines_1wk)
+
+model_low_2wk_interaction <- lmer(FEELINGRATING ~ Comp_JOURNEY_USE_D * WINDOW_PERIOD + (1 | USERID), data = daily_cases_low_feeling_lines_2wk)
+
+model_low_1mo_interaction <- lmer(FEELINGRATING ~ Comp_JOURNEY_USE_D * WINDOW_PERIOD + (1 | USERID), data = daily_cases_low_feeling_lines_1)
+
+model_low_3mo_interaction <- lmer(FEELINGRATING ~ Comp_JOURNEY_USE_D * WINDOW_PERIOD + (1 | USERID), data = daily_cases_low_feeling_lines_3)
+
+model_low_6mo_interaction <- lmer(FEELINGRATING ~ Comp_JOURNEY_USE_D * WINDOW_PERIOD + (1 | USERID), data = daily_cases_low_feeling_lines_6)
 
 summary(model_low_1wk)
 
+summary(model_low_2wk)
+
+summary(model_low_1mo)
+
+summary(model_low_3mo)
+
 summary(model_low_6mo)
 
+summary(model_low_1wk_interaction)
 
-model_low_1 <- lmer(FEELINGRATING ~ Comp_JOURNEY_USE_D * WINDOW_PERIOD + (1 | USERID), data = daily_cases_low_feeling_lines_1wk)
+summary(model_low_2wk_interaction)
 
-summary(model_low_1)
+summary(model_low_1mo_interaction)
+
+summary(model_low_3mo_interaction)
+
+summary(model_low_6mo_interaction)
 
 
 ```
